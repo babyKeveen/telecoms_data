@@ -1,0 +1,22 @@
+services:
+  ml-notebook:
+    build: .
+    container_name: telco-ml-lab
+    ports:
+      - "8888:8888"
+      - "8501:8501"
+    environment:
+      - JUPYTER_ENABLE_LAB=yes
+      - JUPYTER_NOTEBOOK_DIR=/home/jovyan/telco-poc/notebooks
+    working_dir: /home/jovyan
+    volumes:
+      - .:/home/jovyan/telco-poc
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+
+volumes: {}
