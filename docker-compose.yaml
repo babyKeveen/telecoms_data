@@ -8,9 +8,11 @@ services:
     environment:
       - JUPYTER_ENABLE_LAB=yes
       - JUPYTER_NOTEBOOK_DIR=/home/jovyan/telco-poc/notebooks
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
     working_dir: /home/jovyan
     volumes:
       - .:/home/jovyan/telco-poc
+      - /mnt/c/S3Data:/home/jovyan/data
     deploy:
       resources:
         reservations:
