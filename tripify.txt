@@ -1,0 +1,18 @@
+total_rows	913,539,144	
+vehicles	99,610	
+handovers	941,090	
+Starttime 	2025-01-01 00:02:01.793	
+Endtime 	2025-11-01 23:59:56.110
+
+
+556,348,918,251 (727)
+265 095 222 140
+
+raw factor into trips drives are trip
+gaylord - string connection trip route - ai i75 
+rural area direction 
+
+tripify 
+
+I would like to see this cell rewritten to post progress and increase the threads. 
+and can the GPU be marshalled into use?

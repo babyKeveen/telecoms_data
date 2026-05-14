@@ -1,2 +1,6 @@
 .ipynb_checkpoints
 .env
+notebooks/.venv/
+notebooks/.tmp/
+notebooks/.claude/
+*.tmp
