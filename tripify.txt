@@ -16,3 +16,8 @@ tripify
 
 I would like to see this cell rewritten to post progress and increase the threads. 
 and can the GPU be marshalled into use?
+
+
+git -C /home/kevin/projects/endeavourDemo push origin fix-dependencies
+
+wget "https://opencellid.org/ocid/downloads?token=pk.8e1a79e6044edbc647ea8d3943bede76&type=mcc&file=310410.csv.gz" -O /home/jovyan/data/cell_towers_att.csv.gz

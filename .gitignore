@@ -4,3 +4,4 @@ notebooks/.venv/
 notebooks/.tmp/
 notebooks/.claude/
 *.tmp
+notebooks/cell_tower_map.html
