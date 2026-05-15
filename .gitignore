@@ -5,3 +5,6 @@ notebooks/.tmp/
 notebooks/.claude/
 *.tmp
 notebooks/cell_tower_map.html
+notebooks/trips.json
+notebooks/top20_trips.json
+notebooks/08_trips_to_json.ipynb
