@@ -21,3 +21,45 @@ and can the GPU be marshalled into use?
 git -C /home/kevin/projects/endeavourDemo push origin fix-dependencies
 
 wget "https://opencellid.org/ocid/downloads?token=pk.8e1a79e6044edbc647ea8d3943bede76&type=mcc&file=310410.csv.gz" -O /home/jovyan/data/cell_towers_att.csv.gz
+
+
+the pipeline was spliting at the day boundaries so any vehicle moving through midnight gets a false end-of-trip  break. we built a solution to fix that
+
+In the US they legally can't — the FMCSA Hours of Service rules cap commercial drivers at 11 hours of driving within a 14-hour window, then mandatory 10-hour rest. So 16 hours continuous would be a
+  violation for a regulated trucker.
+  
+The shared_cell_location_lat_lon.csv has at least one cell ID that maps to the wrong coast. Cell 22504712 likely has a coordinate entry that belongs to a West Coast cell with the same numeric ID
+  (AT&T reuses cell ID numbers across regions — the 310-410-<id> namespace may not be globally unique in this export).  
+  
+  
+  
+● Bash(python3 << 'EOF'
+      import pandas as pd…)
+  ⎿  Cell 22504712: (33.92586, -80.996)
+     Cell 22835223: (33.906836, -81.058755)
+     Cell 20518408: (34.07564, -80.907207)
+
+● All three cells now sit within ~15 miles of each other in South Carolina — geographically coherent.
+
+  Summary of the fix:
+
+  ┌─────────────┬───────────────────────┬──────────────────┐
+  │    Field    │        Before         │      After       │
+  ├─────────────┼───────────────────────┼──────────────────┤
+  │ latitude    │ 34.234871             │ 33.925860        │
+  ├─────────────┼───────────────────────┼──────────────────┤
+  │ longitude   │ -117.423119           │ -80.996000       │
+  ├─────────────┼───────────────────────┼──────────────────┤
+  │ county      │ San Bernardino County │ Kershaw County   │
+  ├─────────────┼───────────────────────┼──────────────────┤
+  │ state       │ California            │ South Carolina   │
+  ├─────────────┼───────────────────────┼──────────────────┤
+  │ location_id │ 34.2348:-117.4231     │ 33.9259:-80.9960 │
+  └─────────────┴───────────────────────┴──────────────────┘
+
+  The coordinate was inferred from the median midpoint of the 487 neighboring cell pairs across all 510 affected trips — std dev of 0.03° (~2 miles), so the estimate is solid. The @st.cache_data on
+  load_coord_lookup() in the Streamlit pages will pick up the fix on the next cold load (or after clearing the cache).
+  
+  the CSV has the full metadata wrong (San Bernardino County, California). I'll fix lat, lon, county, state, and the location_id field to match the inferred South Carolina location.
+  
+  

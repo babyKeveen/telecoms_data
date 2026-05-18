@@ -83,8 +83,8 @@ MATCH_RADIUS_DEG   = match_radius_miles / 69.0
 CORRIDOR_WIDTH_DEG = corridor_width_miles / 69.0
 
 st.sidebar.divider()
-show_gaps   = st.sidebar.toggle("Show silence gap hotspots", value=True)
-min_gap_min = st.sidebar.slider("Min gap duration (minutes)", 5, 60, 15)
+show_gaps   = st.sidebar.toggle("Show silence gap hotspots", value=False)
+min_gap_min = st.sidebar.slider("Min gap duration (minutes)", 5, 60, 15, disabled=not show_gaps)
 
 if origin_name == dest_name:
     st.warning("Origin and destination must be different cities.")
@@ -169,12 +169,12 @@ def city_cells(city: tuple) -> list[str]:
 @st.cache_data(show_spinner="Querying corridor trips...", ttl=300)
 def query_corridor_trips(origin_name, dest_name, both_dirs, start_date, end_date, max_hours, match_radius_deg):
     a_cells = [
-        str(cid) for cid, (lat, lon) in coord_lookup.items()
+        cid for cid, (lat, lon) in coord_lookup.items()
         if abs(lat - CITIES[origin_name][0]) <= match_radius_deg
         and abs(lon - CITIES[origin_name][1]) <= match_radius_deg
     ]
     b_cells = [
-        str(cid) for cid, (lat, lon) in coord_lookup.items()
+        cid for cid, (lat, lon) in coord_lookup.items()
         if abs(lat - CITIES[dest_name][0]) <= match_radius_deg
         and abs(lon - CITIES[dest_name][1]) <= match_radius_deg
     ]

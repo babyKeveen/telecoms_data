@@ -32,6 +32,7 @@ Or `python -m pipeline.ingest` from the container.
 ```bash
 python notebooks/rebuild_trips.py [--max-hours 4.0] [--start-date 2025-07-01] [--end-date 2025-07-31]
 python notebooks/rebuild_outputs.py
+python notebooks/build_vector_db.py   # re-run after rebuild_trips.py
 ```
 
 ## Architecture
@@ -58,6 +59,10 @@ Both Streamlit pages and the CLI scripts use **DuckDB with no persistent DB file
 - `Home.py` — landing page only
 - `pages/1_Route_Map.py` — queries the trips Parquet, resolves cell IDs to coordinates via the lookup, renders folium PolyLines
 - `pages/2_Gap_Analysis.py` — detects coverage gaps as ping intervals > expected cadence (~485s), maps hotspot cells as CircleMarkers sized by event count
+- `pages/3_Corridor_Analysis.py` — city-pair corridor view: filters trips whose first/last cells fall within a configurable bounding box around two chosen cities, then clips each trip's `cell_sequence` to a perpendicular corridor around the A→B line (rejects trips where <60% of cells are on-corridor). City cell sets are resolved in Python from `coord_lookup`; the DuckDB query pushes `first_cell`/`last_cell` filtering into SQL via registered DataFrames. Silence-gap hotspots from `handover_events` are optionally overlaid as red CircleMarkers.
+
+### Vector Database (`/home/jovyan/data/vector_db/`)
+FAISS index over all trips with 8 numeric features: `duration_minutes`, `n_cells`, `n_handovers`, `n_events`, `first_lat/lon`, `last_lat/lon`. Built by `pipeline/vectors.py`. Supports explicit feature-dict search and NL queries (NL requires `ANTHROPIC_API_KEY`).
 
 ### Pipeline Package (`pipeline/`)
 - `ingest.py` — loads/cleans raw CSV; paths controlled by env vars `RAW_DATA_PATH` / `PARQUET_PATH`

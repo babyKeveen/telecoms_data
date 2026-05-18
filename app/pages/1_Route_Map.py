@@ -28,7 +28,7 @@ st.title("🗺️ Top Vehicle Trips")
 # ---------------------------------------------------------------------------
 st.sidebar.header("Filters")
 
-max_hours = st.sidebar.slider("Max trip duration (hours)", 1.0, 12.0, 8.0, 0.5)
+max_hours = st.sidebar.slider("Max trip duration (hours)", 1.0, 48.0, 8.0, 0.5)
 min_cph   = st.sidebar.slider("Min cells per hour", 1.0, 10.0, 3.0, 0.5)
 top_n     = st.sidebar.slider("Number of trips", 5, 20, 20)
 
