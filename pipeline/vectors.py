@@ -169,7 +169,7 @@ def nl_query(index, metadata: pd.DataFrame, norm_stats: dict,
     city_hint = "\n".join(f"  {name}: lat={lat}, lon={lon}"
                           for name, (lat, lon) in CITIES.items())
 
-    system = f"""You parse natural-language trip queries into JSON feature vectors for a FAISS nearest-neighbour search.
+    system_text = f"""You parse natural-language trip queries into JSON feature vectors for a FAISS nearest-neighbour search.
 
 Feature schema and real-world ranges:
 {json.dumps(ranges, indent=2)}
@@ -186,9 +186,9 @@ Rules:
 """
 
     resp = client.messages.create(
-        model="claude-sonnet-4-6",
+        model="claude-haiku-4-5-20251001",
         max_tokens=256,
-        system=system,
+        system=[{"type": "text", "text": system_text, "cache_control": {"type": "ephemeral"}}],
         messages=[{"role": "user", "content": question}],
     )
     raw = json.loads(resp.content[0].text)
