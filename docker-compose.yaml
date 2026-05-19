@@ -12,13 +12,6 @@ services:
     working_dir: /home/jovyan
     volumes:
       - .:/home/jovyan/telco-poc
-      - /mnt/c/S3Data:/home/jovyan/data
-    deploy:
-      resources:
-        reservations:
-          devices:
-            - driver: nvidia
-              count: 1
-              capabilities: [gpu]
+      - ${DATA_PATH}:/home/jovyan/data
 
 volumes: {}

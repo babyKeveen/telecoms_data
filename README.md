@@ -2,19 +2,36 @@
 
 LTE drive-test signal analysis — cell-to-cell handover routes and coverage gap detection.
 
-## Setup
+## Getting Started
 
-### 1. Add your data
+**Prerequisites:** [Docker Desktop](https://www.docker.com/products/docker-desktop/) and Git. No WSL2 or other Linux setup required.
+
+### 1. Clone the repo
 ```bash
-cp /path/to/SRFG-v1.csv ./data/
+git clone <repo-url>
+cd endeavourDemo
 ```
 
-### 2. Start the environment
+### 2. Configure your environment
 ```bash
-docker compose up
+cp .env.example .env
+```
+Edit `.env` and set:
+- `ANTHROPIC_API_KEY` — your Anthropic API key (needed for NL trip search)
+- `DATA_PATH` — absolute path to your local data folder (e.g. `C:\S3Data` on Windows, `/Users/you/S3Data` on Mac)
+
+### 3. Start the environment
+```bash
+docker compose up                                               # CPU (default)
+docker compose -f docker-compose.yaml -f docker-compose.gpu.yml up  # NVIDIA GPU
 ```
 
-### 3. Convert data to Parquet (run once)
+| Service | URL |
+|---|---|
+| Jupyter Lab | http://localhost:8888 |
+| Streamlit app | http://localhost:8501 |
+
+### 4. Convert data to Parquet (run once)
 Open Jupyter at http://localhost:8888 and run:
 ```python
 import sys; sys.path.insert(0, '/home/jovyan')
@@ -22,12 +39,8 @@ from pipeline.ingest import load_raw, clean, to_parquet
 to_parquet(clean(load_raw()))
 ```
 
-### 4. Launch the demo app
-Inside the container terminal:
-```bash
-streamlit run /home/jovyan/app/Home.py
-```
-Then open http://localhost:8501
+### 5. Launch the demo app
+The Streamlit app starts automatically. Open http://localhost:8501
 
 ## Project Structure
 ```
@@ -60,5 +73,3 @@ telco-poc/
 | RSRP | < -90 dBm | Weak signal strength |
 | SINR | < 0 dB | Noise dominates signal |
 | Signal bars | ≤ 2 / 5 | Low usable signal |
-
-# telecoms_data

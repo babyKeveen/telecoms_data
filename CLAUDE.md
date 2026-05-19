@@ -4,14 +4,20 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Environment
 
-Everything runs inside a Docker container. Start it with:
+Everything runs inside a Docker container managed by **Docker Desktop** — no WSL2 setup needed.
+
+**Prerequisites:** Docker Desktop (Windows / Mac / Linux), Git
+
+**First-time setup:**
 ```bash
-docker compose up
+cp .env.example .env   # then edit .env with your ANTHROPIC_API_KEY and DATA_PATH
+docker compose up                                                    # CPU
+docker compose -f docker-compose.yaml -f docker-compose.gpu.yml up  # NVIDIA GPU
 ```
 - Jupyter Lab: http://localhost:8888
 - Streamlit app: http://localhost:8501
 
-The repo is mounted at `/home/jovyan/telco-poc` inside the container. Raw data lives at `/home/jovyan/data/` (mounted from `/mnt/c/S3Data` on the host — not in the repo).
+The repo is mounted at `/home/jovyan/telco-poc` inside the container. Raw data lives at `/home/jovyan/data/` (mounted from the path you set in `DATA_PATH` in your `.env` — not in the repo).
 
 ## Running the App
 
