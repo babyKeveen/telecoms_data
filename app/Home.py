@@ -21,5 +21,5 @@ Use the sidebar to navigate between:
 - **📊 Signal Quality** — Signal metric distributions across the route
 """)
 
-st.info("Data source: SRFG Austrian Highway LTE Dataset (IEEE DataPort / CRAWDAD)")
+st.info("Data source: US AT&T (MCC 310, MNC 410) — Ford SIM handover events")
 

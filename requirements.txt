@@ -24,3 +24,7 @@ streamlit-folium>=0.15.0
 python-dotenv>=1.0.0
 loguru>=0.7.0
 
+# Jupyter AI / Anthropic
+jupyter-ai>=2.0.0
+langchain-anthropic
+anthropic

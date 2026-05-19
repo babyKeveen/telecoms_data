@@ -1,0 +1,23 @@
+# Environment — never commit secrets or local paths
+.env
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+notebooks/.venv/
+
+# Jupyter
+.ipynb_checkpoints
+notebooks/.tmp/
+notebooks/.claude/
+*.tmp
+notebooks/cell_tower_map.html
+notebooks/trips.json
+notebooks/top20_trips.json
+notebooks/08_trips_to_json.ipynb
+
+# Data — large files and generated artifacts stay out of the repo
+*.parquet
+data/stage/
+data/vector_db/

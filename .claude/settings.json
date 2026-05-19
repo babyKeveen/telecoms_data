@@ -1,0 +1,21 @@
+{
+  "spinnerVerbs": {
+    "mode": "replace",
+    "verbs": ["Processing"]
+  },
+  "permissions": {
+    "allow": [
+      "Bash(/opt/conda/bin/python3 *)",
+      "Bash(/opt/conda/bin/python *)",
+      "Bash(python3 *)",
+      "Bash(python *)",
+      "Bash(jupyter *)",
+      "Bash(zcat *)",
+      "Bash(gzip *)",
+      "Bash(gunzip *)",
+      "Bash(find *)",
+      "Bash(glob *)"
+    ],
+    "deny": []
+  }
+}

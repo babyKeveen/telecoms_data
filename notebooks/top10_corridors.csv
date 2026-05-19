@@ -1,0 +1,11 @@
+rank,origin,destination,trips,vehicles,avg_duration_min,avg_cells
+1,Detroit/Dearborn MI,Troy/Pontiac MI,23244,4847,143.5,11.7
+2,Fort Worth TX,Dallas TX,9109,1407,146.6,12.9
+3,West Phoenix AZ,Phoenix AZ,8184,1133,152.2,13.0
+4,SW Houston TX,NW Houston TX,7337,1387,136.3,12.8
+5,West LA CA,East LA CA,5990,1198,126.3,13.0
+6,West Fort Worth TX,Fort Worth TX,5574,1180,143.0,12.9
+7,SW Houston TX,N Houston TX,5442,1249,126.9,12.9
+8,Ann Arbor MI,Troy/Pontiac MI,5236,1932,139.4,11.7
+9,Phoenix AZ,Scottsdale/Tempe AZ,5023,963,154.8,12.7
+10,South Fort Worth TX,Fort Worth TX,4760,987,141.1,13.0

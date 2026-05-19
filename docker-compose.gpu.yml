@@ -1,0 +1,11 @@
+# GPU override — use with:
+#   docker compose -f docker-compose.yaml -f docker-compose.gpu.yml up
+services:
+  ml-notebook:
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
