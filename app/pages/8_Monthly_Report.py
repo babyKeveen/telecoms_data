@@ -204,24 +204,20 @@ def fetch_ping_buckets(start_date, end_date, trip_windows: tuple) -> pd.DataFram
     )
     return con.execute(f"""
         WITH raw AS (
-            SELECT vehicle_id, event_ts, ping1, ping2, ping3, ping4
+            SELECT vehicle_id, event_ts,
+                   (ping1 + ping2 + ping3 + ping4) / 4.0 AS ms
             FROM read_parquet('{HANDOVER_DIR}/event_date=*/*.parquet', hive_partitioning=true)
             WHERE event_date BETWEEN '{start_date}' AND '{end_date}'
               AND vehicle_id IN (SELECT DISTINCT vehicle_id FROM trip_windows)
         ),
-        exploded AS (
-            SELECT vehicle_id, event_ts,
-                   UNNEST([ping1, ping2, ping3, ping4]) AS ms
-            FROM raw
-        ),
         joined AS (
-            SELECT t.trip_id, e.ms
+            SELECT t.trip_id, r.ms
             FROM trip_windows t
-            JOIN exploded e
-                ON  e.vehicle_id = t.vehicle_id
-                AND e.event_ts  >= CAST(t.trip_start AS TIMESTAMP)
-                AND e.event_ts  <= CAST(t.trip_end AS TIMESTAMP)
-            WHERE e.ms IS NOT NULL
+            JOIN raw r
+                ON  r.vehicle_id = t.vehicle_id
+                AND r.event_ts  >= CAST(t.trip_start AS TIMESTAMP)
+                AND r.event_ts  <= CAST(t.trip_end AS TIMESTAMP)
+            WHERE r.ms IS NOT NULL
         )
         SELECT trip_id,
             {cases}
