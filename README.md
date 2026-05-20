@@ -31,12 +31,25 @@ docker compose -f docker-compose.yaml -f docker-compose.gpu.yml up  # NVIDIA GPU
 | Jupyter Lab | http://localhost:8888 |
 | Streamlit app | http://localhost:8501 |
 
-### 4. Convert data to Parquet (run once)
-Open Jupyter at http://localhost:8888 and run:
-```python
-import sys; sys.path.insert(0, '/home/jovyan')
-from pipeline.ingest import load_raw, clean, to_parquet
-to_parquet(clean(load_raw()))
+### 4. Build the data pipeline (run once, inside the container)
+
+**Stage handover events** from raw daily files (~1–2 hours, resumable):
+```bash
+rm -rf /home/jovyan/data/stage/handover_events/
+jupyter nbconvert --to notebook --execute --ExecutePreprocessor.timeout=21600 \
+    --output notebooks/build_stage_duckdb_out.ipynb \
+    notebooks/build_stage_duckdb.ipynb
+```
+Monitor progress: `cat /tmp/stage_progress.json`
+
+**Build trips** from staged events (~30 min):
+```bash
+python notebooks/rebuild_trips_stage.py
+```
+
+**Build vector DB** (seconds):
+```bash
+python notebooks/build_vector_db_np.py
 ```
 
 ### 5. Launch the demo app
@@ -53,12 +66,37 @@ The Streamlit app starts automatically. Open http://localhost:8501
 | 5 — Route Search | Find trips matching an origin→destination city pair using start/end lat/lon vectors |
 | 6 — Temporal Patterns | Fleet activity and handover rate by hour of day, day of week, month, and heatmap |
 
+## Data Pipeline
+
+Raw data is 364 daily `.gz` files (headerless CSV, ~100 columns) sourced from the telco SIM platform. The pipeline extracts a subset of columns and stages them as hive-partitioned Parquet.
+
+```
+DATA_PATH/sim_test_decoded/2025/*.gz
+        ↓  build_stage_duckdb.ipynb
+stage/handover_events/event_date=*/   (one row per ping event)
+        ↓  build_trips_duckDB.ipynb
+stage/trips/event_date=*/             (one row per trip + KPI aggregates)
+        ↓  build_vector_db_np.py
+vector_db_np/                         (numpy similarity index)
+```
+
+**KPI columns added to trips** (aggregated from per-event values):
+
+| Column | Description |
+|---|---|
+| `avg_neighbor_rsrp` | Average RSRP of strongest neighbour cell across trip |
+| `min_neighbor_rsrp` | Minimum RSRP of strongest neighbour cell across trip |
+| `avg_neighbor_rsrq` | Average RSRQ of strongest neighbour cell across trip |
+| `avg_ping_ms` | Average of the four ping measurements per event, averaged across trip |
+
+Raw per-event values (`pci_1_rsrp`, `pci_1_rsrq`, `ping1`–`ping4`) are retained in `handover_events` for event-level queries.
+
 ## Project Structure
 ```
 telco-poc/
-├── data/               # Dataset lives here (gitignored)
+├── data/               # Column definitions reference (gitignored raw data)
 ├── pipeline/           # Core logic — ingest, handovers, gaps, vectors
-├── notebooks/          # Exploration notebooks + CLI rebuild scripts
+├── notebooks/          # Build notebooks + CLI rebuild scripts
 ├── app/                # Streamlit demo
 │   ├── Home.py
 │   └── pages/          # Pages 1–6 (see App Pages above)
