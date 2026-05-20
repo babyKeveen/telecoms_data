@@ -131,7 +131,8 @@ def compute_scores(state: str, hour: int, dow: int) -> pd.DataFrame:
 # ---------------------------------------------------------------------------
 st.set_page_config(page_title="Coverage Forecast", layout="wide")
 st.title("📡 Coverage Gap Forecast")
-st.caption("ML-predicted probability of poor signal (RSRP < −90 dBm or avg ping > 300 ms) by cell, time, and state.")
+st.caption("ML-predicted probability of poor neighbour RSRP (< −90 dBm) by cell, hour, and day of week. "
+           "Most cells in this dataset have consistently weak RSRP — use the threshold slider to isolate the worst.")
 
 # Check model is available
 try:
@@ -149,7 +150,7 @@ st.sidebar.header("Filters")
 state = st.sidebar.selectbox("State", sorted(US_STATES.keys()), index=sorted(US_STATES.keys()).index("Michigan"))
 hour  = st.sidebar.slider("Hour of day", 0, 23, 9, format="%d:00")
 dow   = st.sidebar.selectbox("Day of week", range(7), format_func=lambda d: DOW_LABELS[d], index=1)
-threshold = st.sidebar.slider("Show cells with P(gap) ≥", 0.30, 0.90, 0.50, step=0.05,
+threshold = st.sidebar.slider("Show cells with P(gap) ≥", 0.50, 0.99, 0.85, step=0.01,
                                format="%.2f")
 
 # Compute
