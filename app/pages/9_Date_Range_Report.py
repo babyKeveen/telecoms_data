@@ -1,13 +1,11 @@
 """
-Page 8: Monthly State Report
-All trips for a selected month and US state(s). Full KPI table, JSON export, and map.
+Page 9: Date Range State Report
+All trips for a selected date range and US state(s). Full KPI table, JSON export, and map.
 """
-import json
 from datetime import date
 
 import duckdb
 import folium
-import numpy as np
 import pandas as pd
 import shapely
 import streamlit as st
@@ -34,7 +32,6 @@ PING_BUCKETS = [
     ("ping >500",     501, None),
 ]
 
-# Bounding boxes (lat_min, lat_max, lon_min, lon_max) — used for SQL pre-filter
 US_STATES = {
     "Alabama":        (30.19, 35.01, -88.47, -84.89),
     "Arizona":        (31.33, 37.00, -114.82, -109.04),
@@ -86,14 +83,11 @@ US_STATES = {
     "Wyoming":        (40.99, 45.01, -111.06, -104.05),
 }
 
-# Accurate shapely polygons — bounding-box fallback for most states,
-# proper outlines for complex shapes
+
 @st.cache_resource(show_spinner="Loading state boundaries...")
 def build_state_polygons() -> dict:
     polys = {name: box(lon_min, lat_min, lon_max, lat_max)
              for name, (lat_min, lat_max, lon_min, lon_max) in US_STATES.items()}
-
-    # Michigan: Lower + Upper Peninsula
     lower = Polygon([
         (-86.82,41.76),(-86.00,41.70),(-84.81,41.70),(-83.46,41.70),
         (-82.69,42.00),(-82.64,42.61),(-82.41,43.01),(-82.41,43.50),
@@ -107,13 +101,12 @@ def build_state_polygons() -> dict:
         (-84.00,47.00),(-85.00,47.46),(-88.15,47.46),(-89.00,47.46),
         (-90.42,46.60),(-90.14,46.00),(-87.06,45.87)])
     polys["Michigan"] = MultiPolygon([lower, upper])
-
     return polys
 
 
-st.set_page_config(page_title="Monthly Report", layout="wide")
-st.title("📋 Monthly State Report")
-st.caption("All trips in a selected month and state — full KPI table, JSON export, and map.")
+st.set_page_config(page_title="Date Range Report", layout="wide")
+st.title("📅 Date Range State Report")
+st.caption("All trips for a selected date range and state — full KPI table, JSON export, and map.")
 
 # ---------------------------------------------------------------------------
 # Cached loaders
@@ -142,10 +135,12 @@ coord_lookup   = load_coord_lookup()
 # ---------------------------------------------------------------------------
 st.sidebar.header("Filters")
 
-year  = st.sidebar.selectbox("Year",  [2025], index=0)
-month = st.sidebar.selectbox("Month", list(range(1, 13)),
-                              format_func=lambda m: date(2025, m, 1).strftime("%B"),
-                              index=9)   # default October
+start_date = st.sidebar.date_input("Start date", value=date(2025, 10, 1))
+end_date   = st.sidebar.date_input("End date",   value=date(2025, 10, 31))
+
+if start_date > end_date:
+    st.sidebar.error("Start date must be before end date.")
+    st.stop()
 
 selected_states = st.sidebar.multiselect(
     "State (start cell)",
@@ -157,24 +152,13 @@ if not selected_states:
     st.info("Select at least one state to generate the report.")
     st.stop()
 
-# Date range for this month
-import calendar
-_, last_day = calendar.monthrange(year, month)
-start_date = date(year, month, 1)
-end_date   = date(year, month, last_day)
-month_label = start_date.strftime("%B %Y")
+date_label = f"{start_date} to {end_date}"
 
 # ---------------------------------------------------------------------------
-# Query — SQL bounding-box pre-filter across all selected states
+# Query
 # ---------------------------------------------------------------------------
 @st.cache_data(show_spinner="Querying trips...", ttl=300)
 def query_trips(start_date, end_date, selected_states: tuple):
-    bbox_clauses = []
-    for s in selected_states:
-        lat_min, lat_max, lon_min, lon_max = US_STATES[s]
-        # We filter on first_cell via coord lookup in Python;
-        # here we just pull all trips for the month (partition filter is enough
-        # to keep the scan fast)
     con = duckdb.connect()
     return con.execute(f"""
         SELECT trip_id, vehicle_id, trip_start, trip_end,
@@ -190,7 +174,6 @@ def query_trips(start_date, end_date, selected_states: tuple):
 
 @st.cache_data(show_spinner="Computing ping distributions...", ttl=300)
 def fetch_ping_buckets(start_date, end_date, trip_windows: tuple) -> pd.DataFrame:
-    """Return a DataFrame indexed by trip_id with one count column per ping bucket."""
     con = duckdb.connect()
     con.register("trip_windows", pd.DataFrame(
         trip_windows, columns=["trip_id", "vehicle_id", "trip_start", "trip_end"]
@@ -230,26 +213,26 @@ def fetch_ping_buckets(start_date, end_date, trip_windows: tuple) -> pd.DataFram
     """).df().set_index("trip_id")
 
 
-with st.spinner(f"Loading {month_label} trips..."):
+with st.spinner(f"Loading trips for {date_label}..."):
     df = query_trips(start_date, end_date, tuple(sorted(selected_states)))
 
-# Resolve start coordinates
+# Resolve coordinates
 df["start_lat"] = df["first_cell"].map(lambda c: coord_lookup.get(int(c), (None, None))[0] if pd.notna(c) else None)
 df["start_lon"] = df["first_cell"].map(lambda c: coord_lookup.get(int(c), (None, None))[1] if pd.notna(c) else None)
 df["end_lat"]   = df["last_cell"].map(lambda c:  coord_lookup.get(int(c), (None, None))[0] if pd.notna(c) else None)
 df["end_lon"]   = df["last_cell"].map(lambda c:  coord_lookup.get(int(c), (None, None))[1] if pd.notna(c) else None)
 
-# Accurate polygon filter using vectorised shapely
+# Polygon filter
 filter_geom = unary_union([state_polygons[s] for s in selected_states])
 has_start = df.dropna(subset=["start_lat", "start_lon"])
 if len(has_start):
-    pts  = shapely.points(has_start["start_lon"].values, has_start["start_lat"].values)
-    mask = shapely.contains(filter_geom, pts)
+    pts      = shapely.points(has_start["start_lon"].values, has_start["start_lat"].values)
+    mask     = shapely.contains(filter_geom, pts)
     keep_ids = has_start.index[mask]
     df = df.loc[keep_ids].copy()
 
 if df.empty:
-    st.warning(f"No trips found starting in {', '.join(selected_states)} during {month_label}.")
+    st.warning(f"No trips found starting in {', '.join(selected_states)} for {date_label}.")
     st.stop()
 
 # Ping bucket distributions per trip
@@ -264,19 +247,19 @@ with st.spinner("Computing ping distributions..."):
 # KPI row
 # ---------------------------------------------------------------------------
 state_label = ", ".join(selected_states)
-st.subheader(f"{month_label} — {state_label}")
+st.subheader(f"{date_label} — {state_label}")
 
 durations = df["duration_minutes"].dropna()
 rsrp_vals = df["avg_neighbor_rsrp"].dropna()
 ping_vals = df["avg_ping_ms"].dropna()
 
 c1, c2, c3, c4, c5, c6 = st.columns(6)
-c1.metric("Total trips",     f"{len(df):,}")
-c2.metric("Vehicles",        f"{df['vehicle_id'].nunique():,}")
-c3.metric("Avg duration",    f"{durations.mean()/60:.1f} h"         if len(durations) else "—")
-c4.metric("Avg RSRP",        f"{rsrp_vals.mean():.1f} dBm"          if len(rsrp_vals) else "—")
-c5.metric("Avg ping",        f"{ping_vals.mean():.0f} ms"            if len(ping_vals)  else "—")
-c6.metric("Avg handovers",   f"{df['n_handovers'].mean():.1f}"       if len(df)         else "—")
+c1.metric("Total trips",   f"{len(df):,}")
+c2.metric("Vehicles",      f"{df['vehicle_id'].nunique():,}")
+c3.metric("Avg duration",  f"{durations.mean()/60:.1f} h"   if len(durations) else "—")
+c4.metric("Avg RSRP",      f"{rsrp_vals.mean():.1f} dBm"    if len(rsrp_vals) else "—")
+c5.metric("Avg ping",      f"{ping_vals.mean():.0f} ms"      if len(ping_vals)  else "—")
+c6.metric("Avg handovers", f"{df['n_handovers'].mean():.1f}" if len(df)         else "—")
 
 st.divider()
 
@@ -288,10 +271,10 @@ has_coords = df.dropna(subset=["start_lat", "start_lon", "end_lat", "end_lon"])
 if has_coords.empty:
     st.warning("No coordinate data for these trips.")
 else:
-    centre_lat = has_coords["start_lat"].mean()
-    centre_lon = has_coords["start_lon"].mean()
-
-    m = folium.Map(location=[centre_lat, centre_lon], zoom_start=7, tiles="CartoDB positron")
+    m = folium.Map(
+        location=[has_coords["start_lat"].mean(), has_coords["start_lon"].mean()],
+        zoom_start=7, tiles="CartoDB positron"
+    )
 
     HeatMap(has_coords[["start_lat", "start_lon"]].values.tolist(),
             name="Trip starts (heatmap)", radius=7, blur=9, min_opacity=0.3).add_to(m)
@@ -304,10 +287,9 @@ else:
         t = max(0.0, min(1.0, (v - _LO) / (_HI - _LO)))
         return "#%02x%02x00" % (int(220 * (1 - t)), int(180 * t))
 
-    route_fg   = folium.FeatureGroup(name=f"Routes (sample of {ROUTE_SAMPLE:,})", show=True)
-    pool       = has_coords.dropna(subset=["avg_neighbor_rsrp"])
-    n_sample   = min(ROUTE_SAMPLE, len(pool))
-    sample     = pool.sample(n=n_sample, random_state=42)
+    route_fg = folium.FeatureGroup(name=f"Routes (sample of {ROUTE_SAMPLE:,})", show=True)
+    pool     = has_coords.dropna(subset=["avg_neighbor_rsrp"])
+    sample   = pool.sample(n=min(ROUTE_SAMPLE, len(pool)), random_state=42)
     for _, r in sample.iterrows():
         col = rsrp_colour(float(r["avg_neighbor_rsrp"]))
         ping_str = f" | Ping: {r['avg_ping_ms']:.0f} ms" if pd.notna(r["avg_ping_ms"]) else ""
@@ -318,12 +300,12 @@ else:
         folium.PolyLine([[r["start_lat"], r["start_lon"]], [r["end_lat"], r["end_lon"]]],
                         color=col, weight=2, opacity=0.75, tooltip=tip).add_to(route_fg)
     route_fg.add_to(m)
-
     folium.LayerControl(collapsed=False).add_to(m)
+
     st_folium(m, width=1200, height=580, returned_objects=[])
-    if n_sample < len(has_coords):
+    if len(pool) > ROUTE_SAMPLE:
         st.caption(
-            f"Map shows {n_sample:,} sampled routes of {len(has_coords):,} total. "
+            f"Map shows {ROUTE_SAMPLE:,} sampled routes of {len(has_coords):,} total. "
             "Heatmap layers cover all trips. Route colour: red = weak RSRP, green = strong."
         )
 
@@ -335,23 +317,23 @@ st.divider()
 st.subheader(f"All trips ({len(df):,} rows)")
 
 table = pd.DataFrame([{
-    "trip_id":           r["trip_id"],
-    "vehicle_id":        r["vehicle_id"],
-    "trip_start":        str(r["trip_start"])[:19],
-    "trip_end":          str(r["trip_end"])[:19],
-    "duration (h)":      round(float(r["duration_minutes"]) / 60, 2) if pd.notna(r["duration_minutes"]) else None,
-    "n_cells":           int(r["n_cells"])      if pd.notna(r["n_cells"])      else None,
-    "n_handovers":       int(r["n_handovers"])  if pd.notna(r["n_handovers"])  else None,
-    "n_events":          int(r["n_events"])     if pd.notna(r["n_events"])     else None,
-    "dominant_rat":      r["dominant_rat"],
-    "avg_rsrp (dBm)":   round(float(r["avg_neighbor_rsrp"]),  2) if pd.notna(r["avg_neighbor_rsrp"])  else None,
-    "min_rsrp (dBm)":   round(float(r["min_neighbor_rsrp"]),  2) if pd.notna(r["min_neighbor_rsrp"])  else None,
-    "avg_rsrq (dB)":    round(float(r["avg_neighbor_rsrq"]),  2) if pd.notna(r["avg_neighbor_rsrq"])  else None,
-    "avg_ping (ms)":    round(float(r["avg_ping_ms"]),         1) if pd.notna(r["avg_ping_ms"])        else None,
-    "start_lat":         round(float(r["start_lat"]), 1) if pd.notna(r["start_lat"]) else None,
-    "start_lon":         round(float(r["start_lon"]), 1) if pd.notna(r["start_lon"]) else None,
-    "end_lat":           round(float(r["end_lat"]),   1) if pd.notna(r["end_lat"])   else None,
-    "end_lon":           round(float(r["end_lon"]),   1) if pd.notna(r["end_lon"])   else None,
+    "trip_id":          r["trip_id"],
+    "vehicle_id":       r["vehicle_id"],
+    "trip_start":       str(r["trip_start"])[:19],
+    "trip_end":         str(r["trip_end"])[:19],
+    "duration (h)":     round(float(r["duration_minutes"]) / 60, 2) if pd.notna(r["duration_minutes"]) else None,
+    "n_cells":          int(r["n_cells"])      if pd.notna(r["n_cells"])      else None,
+    "n_handovers":      int(r["n_handovers"])  if pd.notna(r["n_handovers"])  else None,
+    "n_events":         int(r["n_events"])     if pd.notna(r["n_events"])     else None,
+    "dominant_rat":     r["dominant_rat"],
+    "avg_rsrp (dBm)":  round(float(r["avg_neighbor_rsrp"]),  2) if pd.notna(r["avg_neighbor_rsrp"])  else None,
+    "min_rsrp (dBm)":  round(float(r["min_neighbor_rsrp"]),  2) if pd.notna(r["min_neighbor_rsrp"])  else None,
+    "avg_rsrq (dB)":   round(float(r["avg_neighbor_rsrq"]),  2) if pd.notna(r["avg_neighbor_rsrq"])  else None,
+    "avg_ping (ms)":   round(float(r["avg_ping_ms"]),         1) if pd.notna(r["avg_ping_ms"])        else None,
+    "start_lat":        round(float(r["start_lat"]), 1) if pd.notna(r["start_lat"]) else None,
+    "start_lon":        round(float(r["start_lon"]), 1) if pd.notna(r["start_lon"]) else None,
+    "end_lat":          round(float(r["end_lat"]),   1) if pd.notna(r["end_lat"])   else None,
+    "end_lon":          round(float(r["end_lon"]),   1) if pd.notna(r["end_lon"])   else None,
 } for _, r in df.iterrows()])
 
 if not ping_dist.empty:
@@ -359,6 +341,6 @@ if not ping_dist.empty:
         table[label] = table["trip_id"].map(ping_dist[label].to_dict() if label in ping_dist.columns else {}).fillna(0).astype(int)
 
 json_bytes = table.to_json(orient="records", indent=2).encode("utf-8")
-fname = f"trips_{month_label.replace(' ', '_')}_{'-'.join(s.replace(' ', '_') for s in selected_states)}.json"
+fname = f"trips_{start_date}_{end_date}_{'-'.join(s.replace(' ', '_') for s in selected_states)}.json"
 st.download_button("⬇ Download JSON", data=json_bytes, file_name=fname, mime="application/json")
 st.dataframe(table, use_container_width=True, hide_index=True)

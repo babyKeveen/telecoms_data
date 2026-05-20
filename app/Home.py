@@ -28,6 +28,7 @@ Use the sidebar to navigate between:
 - **📅 Temporal Patterns** — Fleet activity, handover rate, ping latency, and neighbour RSRP over time
 - **📶 Signal Map** — Filter trips by date range, average RSRP, and duration; routes coloured by signal strength
 - **📋 Monthly Report** — All trips for a selected month and state; full KPI table with start/end coordinates and JSON export
+- **📅 Date Range Report** — Same report with a free start/end date range instead of a fixed month
 """)
 
 st.info("Data source: US AT&T (MCC 310, MNC 410) — 2025 full-year SIM handover events")
