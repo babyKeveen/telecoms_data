@@ -95,7 +95,13 @@ log(f"  {df['cell_id'].nunique():,} unique cells")
 # ---------------------------------------------------------------------------
 log("Engineering features...")
 df["gap_rate"] = df["n_gap"] / df["n_events"].clip(lower=1)
-df["is_gap"]   = df["gap_rate"] > 0.30   # >30% of events had RSRP < -90 dBm
+
+# Use the training-set median as threshold — produces ~50/50 split and
+# means P(gap) > 0.5 = "worse than fleet average coverage"
+train_mask     = df["month"].between(1, 9)
+median_gap     = float(df.loc[train_mask, "gap_rate"].median())
+log(f"  Fleet median gap_rate (train): {median_gap:.3f}")
+df["is_gap"]   = df["gap_rate"] > median_gap
 df["hour_sin"], df["hour_cos"] = cyclic_encode(df["hour_of_day"], 24)
 df["dow_sin"],  df["dow_cos"]  = cyclic_encode(df["day_of_week"],  7)
 df = df.dropna(subset=FEATURES)
