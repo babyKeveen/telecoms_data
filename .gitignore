@@ -21,3 +21,4 @@ notebooks/08_trips_to_json.ipynb
 *.parquet
 data/stage/
 data/vector_db/
+exports/
