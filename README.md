@@ -1,4 +1,4 @@
-# Telco Signal POC
+# Telco Signal POC · v1.2.0
 
 LTE drive-test signal analysis — cell-to-cell handover routes and coverage gap detection.
 
