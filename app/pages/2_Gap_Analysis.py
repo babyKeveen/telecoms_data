@@ -15,8 +15,7 @@ import pandas as pd
 import streamlit as st
 from streamlit_folium import st_folium
 
-from pipeline.gaps import RSRP_POOR, SINR_POOR, SIGNAL_BAR_POOR
-from pipeline.ingest import PARQUET_PATH
+from pipeline.gaps import RSRP_POOR, SINR_POOR
 
 HANDOVER_DIR = "/home/jovyan/data/stage/handover_events"
 TRIPS_DIR    = "/home/jovyan/data/stage/trips"
@@ -43,9 +42,8 @@ max_gap_min = st.sidebar.slider("Max gap duration (minutes — cap overnight par
 
 st.sidebar.divider()
 st.sidebar.subheader("Signal quality thresholds")
-rsrp_thresh   = st.sidebar.slider("RSRP poor threshold (dBm)", -120, -70, RSRP_POOR)
-sinr_thresh   = st.sidebar.slider("SINR poor threshold (dB)",   -10,  10,  SINR_POOR)
-signal_thresh = st.sidebar.slider("Signal bars threshold",        1,   4,  SIGNAL_BAR_POOR)
+rsrp_thresh = st.sidebar.slider("Neighbour RSRP poor threshold (dBm)", -120, -70, RSRP_POOR)
+sinr_thresh = st.sidebar.slider("Neighbour RSRQ poor threshold (dB)",   -20,  -5, SINR_POOR)
 
 min_gap_sec = min_gap_min * 60
 max_gap_sec = max_gap_min * 60
@@ -121,30 +119,27 @@ def query_gap_hotspots(start_date, end_date, min_gap_sec, max_gap_sec):
     """).df()
 
 # ---------------------------------------------------------------------------
-# Tab 2: Signal quality gaps (uses thresholds from pipeline/gaps.py)
+# Tab 2: Signal quality gaps — neighbour RSRP/RSRQ from handover_events
 # ---------------------------------------------------------------------------
 @st.cache_data(show_spinner="Analysing signal quality...", ttl=300)
-def query_quality_gaps(start_date, end_date, rsrp_thresh, sinr_thresh, signal_thresh):
+def query_quality_gaps(start_date, end_date, rsrp_thresh, sinr_thresh):
     con = duckdb.connect()
     return con.execute(f"""
         SELECT
             cell_id,
-            COUNT(*)                                                              AS total_records,
-            SUM(CASE WHEN rsrp  < {rsrp_thresh}
-                          OR sinr  < {sinr_thresh}
-                          OR signal <= {signal_thresh} THEN 1 ELSE 0 END)        AS gap_records,
+            COUNT(*)                                                            AS total_records,
+            SUM(CASE WHEN pci_1_rsrp < {rsrp_thresh}
+                          OR pci_1_rsrq < {sinr_thresh} THEN 1 ELSE 0 END)    AS gap_records,
             ROUND(100.0 *
-                  SUM(CASE WHEN rsrp  < {rsrp_thresh}
-                                OR sinr  < {sinr_thresh}
-                                OR signal <= {signal_thresh} THEN 1 ELSE 0 END)
-                  / COUNT(*), 1)                                                  AS gap_pct,
-            ROUND(AVG(rsrp), 1)                                                  AS avg_rsrp,
-            ROUND(MIN(rsrp), 1)                                                  AS min_rsrp,
-            ROUND(AVG(sinr), 1)                                                  AS avg_sinr,
-            ROUND(AVG(lat),  5)                                                  AS lat,
-            ROUND(AVG("long"), 5)                                                AS lon
-        FROM read_parquet('{str(PARQUET_PATH)}')
-        WHERE time::date BETWEEN '{start_date}' AND '{end_date}'
+                  SUM(CASE WHEN pci_1_rsrp < {rsrp_thresh}
+                                OR pci_1_rsrq < {sinr_thresh} THEN 1 ELSE 0 END)
+                  / COUNT(*), 1)                                                AS gap_pct,
+            ROUND(AVG(pci_1_rsrp), 1)                                          AS avg_rsrp,
+            ROUND(MIN(pci_1_rsrp), 1)                                          AS min_rsrp,
+            ROUND(AVG(pci_1_rsrq), 1)                                          AS avg_rsrq
+        FROM read_parquet('{HANDOVER_DIR}/**/*.parquet', hive_partitioning=true)
+        WHERE event_date BETWEEN '{start_date}' AND '{end_date}'
+          AND pci_1_rsrp IS NOT NULL
         GROUP BY cell_id
         HAVING gap_records > 0
         ORDER BY gap_records DESC
@@ -158,7 +153,7 @@ gaps_df     = query_gaps(start_date, end_date, min_gap_sec, max_gap_sec)
 hotspots_df = query_gap_hotspots(start_date, end_date, min_gap_sec, max_gap_sec)
 
 try:
-    quality_df = query_quality_gaps(start_date, end_date, rsrp_thresh, sinr_thresh, signal_thresh)
+    quality_df = query_quality_gaps(start_date, end_date, rsrp_thresh, sinr_thresh)
     quality_err = None
 except Exception as e:
     quality_df  = pd.DataFrame()
@@ -285,8 +280,8 @@ with tab1:
 # ── Tab 2 ────────────────────────────────────────────────────────────────────
 with tab2:
     st.caption(
-        f"Poor signal = RSRP < {rsrp_thresh} dBm  OR  SINR < {sinr_thresh} dB  "
-        f"OR  signal bars ≤ {signal_thresh}  —  thresholds from `pipeline/gaps.py`"
+        f"Poor signal = neighbour RSRP < {rsrp_thresh} dBm  OR  neighbour RSRQ < {sinr_thresh} dB  "
+        f"— sourced from `handover_events` stage Parquet"
     )
 
     if quality_err:
@@ -306,9 +301,12 @@ with tab2:
         st.divider()
 
         st.subheader("Poor signal hotspots")
-        # Coordinates here are averaged vehicle GPS positions during poor-signal readings,
-        # not cell tower locations — they show where in the road network quality degrades.
-        map_rows_q = quality_df.dropna(subset=["lat", "lon"]).to_dict("records")
+        map_rows_q = []
+        for _, row in quality_df.iterrows():
+            cid = int(row["cell_id"]) if pd.notna(row["cell_id"]) else None
+            if cid and cid in coord_lookup:
+                lat, lon = coord_lookup[cid]
+                map_rows_q.append({**row.to_dict(), "lat": lat, "lon": lon, "cell_id": cid})
 
         if map_rows_q:
             centre_q = [
@@ -326,32 +324,30 @@ with tab2:
                     fill=True,
                     fill_opacity=0.6,
                     tooltip=(
-                        f'Cell {int(r["cell_id"])}<br>'
+                        f'Cell {r["cell_id"]}<br>'
                         f'Poor-signal: {r["gap_records"]:,} records ({r["gap_pct"]}%)<br>'
-                        f'Avg RSRP: {r["avg_rsrp"]} dBm<br>'
-                        f'Min RSRP: {r["min_rsrp"]} dBm<br>'
-                        f'Avg SINR: {r["avg_sinr"]} dB'
+                        f'Avg nbr RSRP: {r["avg_rsrp"]} dBm<br>'
+                        f'Min nbr RSRP: {r["min_rsrp"]} dBm<br>'
+                        f'Avg nbr RSRQ: {r["avg_rsrq"]} dB'
                     ),
                 ).add_to(mq)
 
             st_folium(mq, width=1200, height=550, returned_objects=[])
         else:
-            st.info("No cells could be mapped — lat/lon missing from raw parquet.")
+            st.info("No cells could be mapped — coordinate lookup returned no matches.")
 
         st.divider()
 
         st.subheader("Worst signal quality cells")
         st.dataframe(
-            quality_df.head(50)
-            .drop(columns=["lat", "lon"], errors="ignore")
-            .rename(columns={
+            quality_df.head(50).rename(columns={
                 "cell_id":       "Cell ID",
                 "total_records": "Total records",
                 "gap_records":   "Poor-signal records",
                 "gap_pct":       "Gap %",
-                "avg_rsrp":      "Avg RSRP (dBm)",
-                "min_rsrp":      "Min RSRP (dBm)",
-                "avg_sinr":      "Avg SINR (dB)",
+                "avg_rsrp":      "Avg nbr RSRP (dBm)",
+                "min_rsrp":      "Min nbr RSRP (dBm)",
+                "avg_rsrq":      "Avg nbr RSRQ (dB)",
             }),
             use_container_width=True,
             hide_index=True,
