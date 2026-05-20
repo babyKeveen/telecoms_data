@@ -197,12 +197,23 @@ selected_states = st.sidebar.multiselect(
 
 top_n = st.sidebar.slider("Max trips on map", 10, MAX_TRIPS, 50)
 
+SORT_OPTIONS = {
+    "Longest duration first":  "duration_minutes DESC",
+    "Shortest duration first": "duration_minutes ASC",
+    "Worst signal first":      "avg_neighbor_rsrp ASC",
+    "Best signal first":       "avg_neighbor_rsrp DESC",
+    "Most handovers first":    "n_handovers DESC",
+    "Random sample":           "RANDOM()",
+}
+sort_label = st.sidebar.selectbox("Sort / select by", options=list(SORT_OPTIONS.keys()))
+order_by   = SORT_OPTIONS[sort_label]
+
 # ---------------------------------------------------------------------------
 # Query
 # ---------------------------------------------------------------------------
 @st.cache_data(show_spinner="Querying trips...", ttl=300)
 def query_trips(start_date, end_date, rsrp_lo, rsrp_hi, dur_lo_h, dur_hi_h,
-                selected_states: tuple, top_n):
+                selected_states: tuple, top_n, order_by: str):
     con = duckdb.connect()
 
     state_filter = ""
@@ -227,7 +238,7 @@ def query_trips(start_date, end_date, rsrp_lo, rsrp_hi, dur_lo_h, dur_hi_h,
           AND avg_neighbor_rsrp BETWEEN {rsrp_lo} AND {rsrp_hi}
           AND duration_minutes  BETWEEN {dur_lo_h * 60} AND {dur_hi_h * 60}
           {state_filter}
-        ORDER BY duration_minutes DESC
+        ORDER BY {order_by}
         LIMIT {top_n}
     """).df()
 
@@ -238,6 +249,7 @@ df = query_trips(
     dur_range[0], dur_range[1],
     tuple(sorted(selected_states)),
     top_n,
+    order_by,
 )
 
 if df.empty:

@@ -1,0 +1,262 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Trip Detection Rules</title>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,600;9..144,700&family=JetBrains+Mono:wght@400;500;600&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #fafaf7;
+    --ink: #1a1a1a;
+    --muted: #6b6b66;
+    --accent: #b8410e;
+    --rule: #e8e6df;
+    --row-alt: #f4f2ec;
+    --header-bg: #1a1a1a;
+    --header-ink: #fafaf7;
+    --code-bg: #2a2a26;
+    --code-ink: #f4f2ec;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    padding: 3rem 1.5rem 5rem;
+    background: var(--bg);
+    color: var(--ink);
+    font-family: 'Inter', system-ui, sans-serif;
+    font-size: 16px;
+    line-height: 1.65;
+  }
+
+  .container {
+    max-width: 920px;
+    margin: 0 auto;
+  }
+
+  .eyebrow {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.72rem;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: var(--accent);
+    margin-bottom: 0.75rem;
+  }
+
+  h1 {
+    font-family: 'Fraunces', Georgia, serif;
+    font-weight: 600;
+    font-size: clamp(2rem, 5vw, 2.75rem);
+    line-height: 1.1;
+    margin: 0 0 1.5rem;
+    letter-spacing: -0.02em;
+  }
+
+  h2 {
+    font-family: 'Fraunces', Georgia, serif;
+    font-weight: 600;
+    font-size: 1.4rem;
+    margin: 3rem 0 1rem;
+    letter-spacing: -0.01em;
+    border-bottom: 1px solid var(--rule);
+    padding-bottom: 0.5rem;
+  }
+
+  .note {
+    background: #fff8ec;
+    border-left: 3px solid var(--accent);
+    padding: 1rem 1.25rem;
+    margin: 1.5rem 0 2rem;
+    font-size: 0.95rem;
+    color: #5a4a30;
+    border-radius: 0 4px 4px 0;
+  }
+
+  .note strong {
+    color: var(--accent);
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.78rem;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    display: block;
+    margin-bottom: 0.35rem;
+  }
+
+  .definition {
+    font-family: 'Fraunces', Georgia, serif;
+    font-size: 1.15rem;
+    line-height: 1.55;
+    padding: 1.5rem 0;
+    border-top: 2px solid var(--ink);
+    border-bottom: 1px solid var(--rule);
+    margin: 1rem 0 2.5rem;
+  }
+
+  .definition strong {
+    font-weight: 700;
+  }
+
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 1rem 0 2rem;
+    font-size: 0.93rem;
+    background: white;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.04);
+    border-radius: 4px;
+    overflow: hidden;
+  }
+
+  thead {
+    background: var(--header-bg);
+  }
+
+  thead th {
+    color: var(--header-ink);
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.72rem;
+    font-weight: 500;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    text-align: left;
+    padding: 0.9rem 1.1rem;
+  }
+
+  tbody td {
+    padding: 1rem 1.1rem;
+    vertical-align: top;
+    border-bottom: 1px solid var(--rule);
+  }
+
+  tbody tr:last-child td {
+    border-bottom: none;
+  }
+
+  tbody tr:nth-child(even) {
+    background: var(--row-alt);
+  }
+
+  td.col-key {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.85rem;
+    font-weight: 500;
+    color: var(--accent);
+    white-space: nowrap;
+    width: 30%;
+  }
+
+  td.col-threshold {
+    font-weight: 500;
+    width: 28%;
+  }
+
+  td.col-rationale {
+    color: var(--muted);
+    line-height: 1.55;
+  }
+
+  /* Two-column variant for the constraints table */
+  .constraints td.col-key {
+    width: 28%;
+  }
+
+  .constraints td.col-effect {
+    color: var(--muted);
+    line-height: 1.55;
+  }
+
+  code {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.85em;
+    background: var(--code-bg);
+    color: var(--code-ink);
+    padding: 0.1em 0.4em;
+    border-radius: 3px;
+  }
+
+  @media (max-width: 640px) {
+    body { padding: 2rem 1rem 3rem; font-size: 15px; }
+    table { font-size: 0.85rem; }
+    thead th, tbody td { padding: 0.7rem 0.6rem; }
+    td.col-key { white-space: normal; }
+  }
+</style>
+</head>
+<body>
+<div class="container">
+
+  <div class="eyebrow">Telemetry / Trip Detection</div>
+  <h1>Trip Detection Rules</h1>
+
+  <div class="note">
+    <strong>Author's Note</strong>
+    Before reading this — there was a lot of noise at the beginning, and I prodded at these a lot before we got something concrete. A lot of trips that were tiny, short, or went nowhere.
+  </div>
+
+  <div class="definition">
+    A <strong>trip</strong> is a continuous period of travel between two parked states, where the vehicle visited at least <strong>10 distinct cells</strong> and changed cells at least <strong>4 times</strong>. Anything shorter is discarded as noise.
+  </div>
+
+  <h2>Explicit Post-Aggregation Filters</h2>
+  <table>
+    <thead>
+      <tr>
+        <th>Filter</th>
+        <th>Threshold</th>
+        <th>Rationale</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td class="col-key"><code>n_handovers &gt;= 4</code></td>
+        <td class="col-threshold">At least 4 cell changes</td>
+        <td class="col-rationale">Filters out very short hops or single-cell noise.</td>
+      </tr>
+      <tr>
+        <td class="col-key"><code>n_cells &gt;= 10</code></td>
+        <td class="col-threshold">At least 10 distinct cells visited</td>
+        <td class="col-rationale">Filters cell-edge oscillation (SIM bouncing between 2–3 nearby cells while parked).</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <h2>Implicit Constraints</h2>
+  <p style="color: var(--muted); margin-top: -0.5rem;">
+    Those are the only two explicit post-aggregation filters. But there are a few implicit constraints baked into the logic that also shape what makes it into the output.
+  </p>
+
+  <table class="constraints">
+    <thead>
+      <tr>
+        <th>Constraint</th>
+        <th>Effect</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td class="col-key"><code>STATIONARY_POLLS = 3</code></td>
+        <td class="col-effect">A trip can only start or end at a ≥22-min stop. A vehicle that pauses for only 1–2 polls (≤15 min) is never considered parked — that pause stays inside the current trip rather than ending it.</td>
+      </tr>
+      <tr>
+        <td class="col-key"><code>trip_id IS NOT NULL</code></td>
+        <td class="col-effect">Stationary events are written with <code>trip_id = NULL</code> and excluded from <code>trip_agg</code> entirely.</td>
+      </tr>
+      <tr>
+        <td class="col-key">Day-boundary split</td>
+        <td class="col-effect">Trips are detected per <code>event_date</code> partition. A trip crossing midnight is cut in two — each half is then independently assessed against <code>MIN_HANDOVERS</code> and <code>MIN_CELLS</code>. A long overnight trip could produce two short fragments, one or both of which might fail the thresholds and be dropped.</td>
+      </tr>
+      <tr>
+        <td class="col-key">No duration floor or ceiling</td>
+        <td class="col-effect">A trip can be arbitrarily short or long in time, as long as it passes the cell and handover counts.</td>
+      </tr>
+      <tr>
+        <td class="col-key">No distance filter</td>
+        <td class="col-effect">A vehicle oscillating between 10+ cells within a small geographic area (e.g. a depot with dense small cells) would pass — geographic spread is not checked.</td>
+      </tr>
+    </tbody>
+  </table>
+
+</div>
+</body>
+</html>

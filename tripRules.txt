@@ -1,0 +1,31 @@
+Note - before reading this, we had a lot of noise at the beginning and I pricked about with these a lot before we got something concrete. A lot of trips that were tiny or short or went nowhere.
+	 
+A trip is a continuous period of travel between two parked states, where the vehicle visited at least 10 distinct cells and changed cells at least 4 times. Anything shorter is discarded as noise.
+
+  ┌──────────────────┬────────────────────────────────────┬────────────────────────────────────────────────────────────────────────────────────┐
+  │      Filter      │             Threshold              │                                     Rationale                                      │
+  ├──────────────────┼────────────────────────────────────┼────────────────────────────────────────────────────────────────────────────────────┤
+  │ n_handovers >= 4 │ At least 4 cell changes            │ Filters out very short hops or single-cell noise                                   │
+  ├──────────────────┼────────────────────────────────────┼────────────────────────────────────────────────────────────────────────────────────┤
+  │ n_cells >= 10    │ At least 10 distinct cells visited │ Filters cell-edge oscillation (SIM bouncing between 2–3 nearby cells while parked) │
+  └──────────────────┴────────────────────────────────────┴────────────────────────────────────────────────────────────────────────────────────┘
+
+Those are the only two explicit post-aggregation filters. But there are a few implicit constraints baked into the logic that also shape what makes it into the output:
+  
+  ┌─────────────────────────┬─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┐
+  │       Constraint        │                                                                                     Effect                                                                                      │
+  ├─────────────────────────┼─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┤
+  │ STATIONARY_POLLS = 3    │ A trip can only start/end at a ≥22-min stop. A vehicle that pauses for only 1–2 polls (≤15 min) is never considered parked — that pause stays inside the current trip rather    │
+  │                         │ than ending it                                                                                                                                                                  │
+  ├─────────────────────────┼─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┤
+  │ trip_id IS NOT NULL     │ Stationary events are written with trip_id = NULL and excluded from trip_agg entirely                                                                                           │
+  ├─────────────────────────┼─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┤
+  │ Day-boundary split      │ Trips are detected per event_date partition. A trip crossing midnight is cut in two — each half is then independently assessed against MIN_HANDOVERS and MIN_CELLS. A long      │
+  │                         │ overnight trip could produce two short fragments, one or both of which might fail the thresholds and be dropped                                                                 │
+  ├─────────────────────────┼─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┤
+  │ No duration floor or    │ A trip can be arbitrarily short or long in time as long as it passes the cell/handover counts                                                                                   │
+  │ ceiling                 │                                                                                                                                                                                 │
+  ├─────────────────────────┼─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┤
+  │ No distance filter      │ A vehicle oscillating between 10+ cells within a small geographic area (e.g. a depot with dense small cells) would pass — geographic spread is not checked                      │
+  └─────────────────────────┴─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┘
+  
