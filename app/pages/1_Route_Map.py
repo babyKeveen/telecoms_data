@@ -8,6 +8,8 @@ import duckdb
 import folium
 import pandas as pd
 import streamlit as st
+from branca.element import MacroElement
+from jinja2 import Template
 from streamlit_folium import st_folium
 
 COORD_CSV = "/home/jovyan/data/sim/raw/shared_cell_location_lat_lon.csv"
@@ -138,7 +140,35 @@ all_lats = [c["lat"] for t in trips for c in t["coordinates"]]
 all_lons = [c["lon"] for t in trips for c in t["coordinates"]]
 centre   = [sum(all_lats) / len(all_lats), sum(all_lons) / len(all_lons)]
 
+CELL_DOT_MIN_ZOOM = 10   # dots appear at zoom >= this level
+
+class _ZoomLayer(MacroElement):
+    """Show/hide a FeatureGroup based on current map zoom."""
+    _template = Template("""
+        {% macro script(this, kwargs) %}
+        (function(){
+            var fg  = {{ this.fg_name }};
+            var map = {{ this._parent.get_name() }};
+            function _upd() {
+                if (map.getZoom() >= {{ this.min_zoom }}) {
+                    if (!map.hasLayer(fg)) fg.addTo(map);
+                } else {
+                    if (map.hasLayer(fg)) map.removeLayer(fg);
+                }
+            }
+            map.on('zoomend', _upd);
+            _upd();
+        })();
+        {% endmacro %}
+    """)
+    def __init__(self, feature_group, min_zoom):
+        super().__init__()
+        self.fg_name  = feature_group.get_name()
+        self.min_zoom = min_zoom
+
 m = folium.Map(location=centre, zoom_start=6, tiles="CartoDB positron")
+
+dot_group = folium.FeatureGroup(name="Cell towers", show=False)
 
 for i, trip in enumerate(trips):
     colour    = COLOURS[i % len(COLOURS)]
@@ -146,6 +176,13 @@ for i, trip in enumerate(trips):
     label     = f'{trip["trip_id"]}  |  {trip["n_cells"]} cells  |  {trip["duration_minutes"]/60:.1f}h'
 
     folium.PolyLine(coords_ll, color=colour, weight=3, opacity=0.85, tooltip=label).add_to(m)
+
+    for c in trip["coordinates"][1:-1]:
+        folium.CircleMarker(
+            location=[c["lat"], c["lon"]], radius=2,
+            color="#000000", fill=True, fill_color="#000000", fill_opacity=0.7,
+            weight=1, tooltip=f'Cell {c["cell_id"]}',
+        ).add_to(dot_group)
 
     folium.CircleMarker(
         location=coords_ll[0], radius=6, color=colour,
@@ -157,6 +194,9 @@ for i, trip in enumerate(trips):
         fill=True, fill_color=colour, fill_opacity=1.0, weight=2,
         tooltip=f"END — {trip['trip_end']}",
     ).add_to(m)
+
+dot_group.add_to(m)
+_ZoomLayer(dot_group, CELL_DOT_MIN_ZOOM).add_to(m)
 
 st_folium(m, width=1200, height=600, returned_objects=[])
 
@@ -173,4 +213,5 @@ table = pd.DataFrame([{
     "n_handovers":       t["n_handovers"],
     "cells/hour":        round(t["n_cells"] / (t["duration_minutes"] / 60), 1) if t["duration_minutes"] else None,
 } for t in trips])
+st.download_button("⬇ Download JSON", data=table.to_json(orient="records", indent=2), file_name="trips.json", mime="application/json")
 st.dataframe(table, use_container_width=True, hide_index=True)

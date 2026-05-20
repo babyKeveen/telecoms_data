@@ -413,19 +413,17 @@ st.divider()
 # Tables
 # ---------------------------------------------------------------------------
 st.subheader("Matched trips")
-st.dataframe(
-    pd.DataFrame([{
-        "trip_id":      t["trip_id"],
-        "direction":    t["direction"],
-        "start":        str(t["trip_start"])[:16],
-        "end":          str(t["trip_end"])[:16],
-        "duration (h)": round(t["duration_minutes"] / 60, 2) if t["duration_minutes"] else None,
-        "n_cells":      t["n_cells"],
-        "n_handovers":  t["n_handovers"],
-    } for t in corridor_trips]),
-    use_container_width=True,
-    hide_index=True,
-)
+_trips_tbl = pd.DataFrame([{
+    "trip_id":      t["trip_id"],
+    "direction":    t["direction"],
+    "start":        str(t["trip_start"])[:16],
+    "end":          str(t["trip_end"])[:16],
+    "duration (h)": round(t["duration_minutes"] / 60, 2) if t["duration_minutes"] else None,
+    "n_cells":      t["n_cells"],
+    "n_handovers":  t["n_handovers"],
+} for t in corridor_trips])
+st.download_button("⬇ Download JSON", data=_trips_tbl.to_json(orient="records", indent=2), file_name="trips.json", mime="application/json")
+st.dataframe(_trips_tbl, use_container_width=True, hide_index=True)
 
 if gap_rows:
     st.subheader("Gap hotspots on this corridor")

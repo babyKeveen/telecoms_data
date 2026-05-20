@@ -196,4 +196,5 @@ display["trip_start"] = display["trip_start"].astype(str).str[:16]
 display["trip_end"]   = display["trip_end"].astype(str).str[:16]
 display["duration_minutes"] = display["duration_minutes"].round(1)
 display["distance"] = display["distance"].round(4)
+st.download_button("⬇ Download JSON", data=display.to_json(orient="records", indent=2), file_name="trips.json", mime="application/json")
 st.dataframe(display, use_container_width=True, hide_index=True)

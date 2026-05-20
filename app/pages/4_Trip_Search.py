@@ -221,8 +221,10 @@ display["distance"]           = display["distance"].round(4)
 display["avg_neighbor_rsrp"]  = display["avg_neighbor_rsrp"].round(1)
 display["avg_neighbor_rsrq"]  = display["avg_neighbor_rsrq"].round(1)
 display["avg_ping_ms"]        = display["avg_ping_ms"].round(0)
-st.dataframe(display.rename(columns={
+display = display.rename(columns={
     "avg_neighbor_rsrp": "Nbr RSRP (dBm)",
     "avg_neighbor_rsrq": "Nbr RSRQ (dB)",
     "avg_ping_ms":       "Avg ping (ms)",
-}), use_container_width=True, hide_index=True)
+})
+st.download_button("⬇ Download JSON", data=display.to_json(orient="records", indent=2), file_name="trips.json", mime="application/json")
+st.dataframe(display, use_container_width=True, hide_index=True)
