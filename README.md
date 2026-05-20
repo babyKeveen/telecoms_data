@@ -65,6 +65,7 @@ The Streamlit app starts automatically. Open http://localhost:8501
 | 4 — Trip Search | FAISS vector similarity search by duration, cell count, handovers, events, time of day |
 | 5 — Route Search | Find trips matching an origin→destination city pair using start/end lat/lon vectors |
 | 6 — Temporal Patterns | Fleet activity and handover rate by hour of day, day of week, month, and heatmap |
+| 7 — Signal Map | Filter trips by date range, avg RSRP, duration, and US state; routes coloured red→green by signal strength |
 
 ## Data Pipeline
 
@@ -114,6 +115,7 @@ telco-poc/
 | 4 | Trip similarity | Top-K trips matching a feature profile via FAISS vector search |
 | 5 | Route search | Trips whose start/end cells best match a city-to-city corridor |
 | 6 | Temporal patterns | Fleet utilisation and network stress by time of day / week / month |
+| 7 | Signal map | Filter trips by RSRP range, duration, date, and US state with colour-coded routes |
 
 ## Signal Quality Thresholds
 | Metric | Poor threshold | Meaning |
