@@ -7,7 +7,6 @@ from datetime import date
 
 import duckdb
 import folium
-import numpy as np
 import pandas as pd
 import shapely
 import streamlit as st
@@ -18,20 +17,19 @@ from streamlit_folium import st_folium
 
 COORD_CSV    = "/home/jovyan/data/sim/raw/shared_cell_location_lat_lon.csv"
 TRIPS_DIR    = "/home/jovyan/data/stage/trips"
-HANDOVER_DIR = "/home/jovyan/data/stage/handover_events"
 ROUTE_SAMPLE = 3000
 
-PING_BUCKETS = [
-    ("ping ≤100",    None, 100),
-    ("ping 101-150",  101, 150),
-    ("ping 151-200",  151, 200),
-    ("ping 201-250",  201, 250),
-    ("ping 251-300",  251, 300),
-    ("ping 301-350",  301, 350),
-    ("ping 351-400",  351, 400),
-    ("ping 401-450",  401, 450),
-    ("ping 451-500",  451, 500),
-    ("ping >500",     501, None),
+PING_COL_MAP = [
+    ("ping_le_100",  "ping ≤100"),
+    ("ping_101_150", "ping 101-150"),
+    ("ping_151_200", "ping 151-200"),
+    ("ping_201_250", "ping 201-250"),
+    ("ping_251_300", "ping 251-300"),
+    ("ping_301_350", "ping 301-350"),
+    ("ping_351_400", "ping 351-400"),
+    ("ping_401_450", "ping 401-450"),
+    ("ping_451_500", "ping 451-500"),
+    ("ping_gt_500",  "ping >500"),
 ]
 
 # Bounding boxes (lat_min, lat_max, lon_min, lon_max) — used for SQL pre-filter
@@ -181,49 +179,13 @@ def query_trips(start_date, end_date, selected_states: tuple):
                duration_minutes, n_cells, n_handovers, n_events,
                first_cell, last_cell, dominant_rat,
                avg_neighbor_rsrp, min_neighbor_rsrp,
-               avg_neighbor_rsrq, avg_ping_ms
+               avg_neighbor_rsrq, avg_ping_ms,
+               ping_le_100, ping_101_150, ping_151_200, ping_201_250, ping_251_300,
+               ping_301_350, ping_351_400, ping_401_450, ping_451_500, ping_gt_500
         FROM read_parquet('{TRIPS_DIR}/event_date=*/*.parquet', hive_partitioning=true)
         WHERE event_date BETWEEN '{start_date}' AND '{end_date}'
         ORDER BY trip_start
     """).df()
-
-
-@st.cache_data(show_spinner="Computing ping distributions...", ttl=300)
-def fetch_ping_buckets(start_date, end_date, trip_windows: tuple) -> pd.DataFrame:
-    """Return a DataFrame indexed by trip_id with one count column per ping bucket."""
-    con = duckdb.connect()
-    con.register("trip_windows", pd.DataFrame(
-        trip_windows, columns=["trip_id", "vehicle_id", "trip_start", "trip_end"]
-    ))
-    cases = "\n            ".join(
-        f"COUNT(CASE WHEN ms > {lo} AND ms <= {hi} THEN 1 END) AS \"{label}\","
-        if lo and hi else
-        (f"COUNT(CASE WHEN ms <= {hi} THEN 1 END) AS \"{label}\"," if hi
-         else f"COUNT(CASE WHEN ms > {lo} THEN 1 END) AS \"{label}\"")
-        for label, lo, hi in PING_BUCKETS
-    )
-    return con.execute(f"""
-        WITH raw AS (
-            SELECT vehicle_id, event_ts,
-                   (ping1 + ping2 + ping3 + ping4) / 4.0 AS ms
-            FROM read_parquet('{HANDOVER_DIR}/event_date=*/*.parquet', hive_partitioning=true)
-            WHERE event_date BETWEEN '{start_date}' AND '{end_date}'
-              AND vehicle_id IN (SELECT DISTINCT vehicle_id FROM trip_windows)
-        ),
-        joined AS (
-            SELECT t.trip_id, r.ms
-            FROM trip_windows t
-            JOIN raw r
-                ON  r.vehicle_id = t.vehicle_id
-                AND r.event_ts  >= CAST(t.trip_start AS TIMESTAMP)
-                AND r.event_ts  <= CAST(t.trip_end AS TIMESTAMP)
-            WHERE r.ms IS NOT NULL
-        )
-        SELECT trip_id,
-            {cases}
-        FROM joined
-        GROUP BY trip_id
-    """).df().set_index("trip_id")
 
 
 with st.spinner(f"Loading {month_label} trips..."):
@@ -247,14 +209,6 @@ if len(has_start):
 if df.empty:
     st.warning(f"No trips found starting in {', '.join(selected_states)} during {month_label}.")
     st.stop()
-
-# Ping bucket distributions per trip
-with st.spinner("Computing ping distributions..."):
-    _windows = tuple(
-        (r["trip_id"], r["vehicle_id"], str(r["trip_start"]), str(r["trip_end"]))
-        for _, r in df.iterrows()
-    )
-    ping_dist = fetch_ping_buckets(start_date, end_date, _windows)
 
 # ---------------------------------------------------------------------------
 # KPI row
@@ -350,9 +304,8 @@ table = pd.DataFrame([{
     "end_lon":           round(float(r["end_lon"]),   1) if pd.notna(r["end_lon"])   else None,
 } for _, r in df.iterrows()])
 
-if not ping_dist.empty:
-    for label, _, _ in PING_BUCKETS:
-        table[label] = table["trip_id"].map(ping_dist[label].to_dict() if label in ping_dist.columns else {}).fillna(0).astype(int)
+for col, label in PING_COL_MAP:
+    table[label] = df[col].fillna(0).astype(int).values
 
 json_bytes = table.to_json(orient="records", indent=2).encode("utf-8")
 fname = f"trips_{month_label.replace(' ', '_')}_{'-'.join(s.replace(' ', '_') for s in selected_states)}.json"

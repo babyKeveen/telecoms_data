@@ -97,6 +97,16 @@ The staged Parquet data lives outside the repo under `/home/jovyan/data/stage/` 
 | `min_neighbor_rsrp` | MIN(pci_1_rsrp) across trip events |
 | `avg_neighbor_rsrq` | AVG(pci_1_rsrq) across trip events |
 | `avg_ping_ms` | AVG((ping1+ping2+ping3+ping4)/4) across trip events |
+| `ping_le_100` | Events where avg ping ≤ 100 ms |
+| `ping_101_150` | Events where avg ping 101–150 ms |
+| `ping_151_200` | Events where avg ping 151–200 ms |
+| `ping_201_250` | Events where avg ping 201–250 ms |
+| `ping_251_300` | Events where avg ping 251–300 ms |
+| `ping_301_350` | Events where avg ping 301–350 ms |
+| `ping_351_400` | Events where avg ping 351–400 ms |
+| `ping_401_450` | Events where avg ping 401–450 ms |
+| `ping_451_500` | Events where avg ping 451–500 ms |
+| `ping_gt_500` | Events where avg ping > 500 ms |
 
 Raw per-event KPI values are retained in `handover_events` for event-level queries — join on `(vehicle_id, event_ts BETWEEN trip_start AND trip_end)`.
 
