@@ -55,7 +55,8 @@ def fetch_cell_sequences(trip_ids: tuple) -> pd.DataFrame:
     ids_sql = ", ".join(f"'{t}'" for t in trip_ids)
     con = duckdb.connect()
     return con.execute(f"""
-        SELECT trip_id, cell_sequence
+        SELECT trip_id, cell_sequence,
+               avg_neighbor_rsrp, avg_neighbor_rsrq, avg_ping_ms
         FROM read_parquet('{TRIPS_DIR}/event_date=*/*.parquet', hive_partitioning=true)
         WHERE trip_id IN ({ids_sql})
     """).df().set_index("trip_id")
@@ -141,11 +142,17 @@ results = search(
 # KPI row
 # ---------------------------------------------------------------------------
 
-c1, c2, c3, c4 = st.columns(4)
-c1.metric("Trips matched", len(results))
-c2.metric("Avg duration", f"{results['duration_minutes'].mean():.0f} min")
-c3.metric("Avg cells", f"{results['n_cells'].mean():.1f}")
-c4.metric("Avg handovers", f"{results['n_handovers'].mean():.1f}")
+c1, c2, c3, c4, c5, c6 = st.columns(6)
+c1.metric("Trips matched",       len(results))
+c2.metric("Avg duration",        f"{results['duration_minutes'].mean():.0f} min")
+c3.metric("Avg cells",           f"{results['n_cells'].mean():.1f}")
+c4.metric("Avg handovers",       f"{results['n_handovers'].mean():.1f}")
+
+sequences = fetch_cell_sequences(tuple(results["trip_id"].tolist()))
+avg_rsrp = sequences["avg_neighbor_rsrp"].mean()
+avg_ping = sequences["avg_ping_ms"].mean()
+c5.metric("Avg neighbour RSRP", f"{avg_rsrp:.1f} dBm" if pd.notna(avg_rsrp) else "N/A")
+c6.metric("Avg ping",           f"{avg_ping:.0f} ms"  if pd.notna(avg_ping)  else "N/A")
 
 st.divider()
 
@@ -153,7 +160,6 @@ st.divider()
 # Map — resolve cell sequences for matched trips
 # ---------------------------------------------------------------------------
 
-sequences = fetch_cell_sequences(tuple(results["trip_id"].tolist()))
 
 map_trips = []
 for _, row in results.iterrows():
@@ -200,12 +206,23 @@ else:
 # ---------------------------------------------------------------------------
 
 st.subheader("Matched trips")
+kpi_cols = sequences[["avg_neighbor_rsrp", "avg_neighbor_rsrq", "avg_ping_ms"]]
+results = results.join(kpi_cols, on="trip_id")
+
 display = results[[
     "trip_id", "vehicle_id", "trip_start", "trip_end",
     "duration_minutes", "n_cells", "n_handovers", "n_events", "distance",
+    "avg_neighbor_rsrp", "avg_neighbor_rsrq", "avg_ping_ms",
 ]].copy()
 display["trip_start"] = display["trip_start"].astype(str).str[:16]
 display["trip_end"]   = display["trip_end"].astype(str).str[:16]
-display["duration_minutes"] = display["duration_minutes"].round(1)
-display["distance"] = display["distance"].round(4)
-st.dataframe(display, use_container_width=True, hide_index=True)
+display["duration_minutes"]   = display["duration_minutes"].round(1)
+display["distance"]           = display["distance"].round(4)
+display["avg_neighbor_rsrp"]  = display["avg_neighbor_rsrp"].round(1)
+display["avg_neighbor_rsrq"]  = display["avg_neighbor_rsrq"].round(1)
+display["avg_ping_ms"]        = display["avg_ping_ms"].round(0)
+st.dataframe(display.rename(columns={
+    "avg_neighbor_rsrp": "Nbr RSRP (dBm)",
+    "avg_neighbor_rsrq": "Nbr RSRQ (dB)",
+    "avg_ping_ms":       "Avg ping (ms)",
+}), use_container_width=True, hide_index=True)

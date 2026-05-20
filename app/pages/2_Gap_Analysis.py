@@ -19,6 +19,7 @@ from pipeline.gaps import RSRP_POOR, SINR_POOR, SIGNAL_BAR_POOR
 from pipeline.ingest import PARQUET_PATH
 
 HANDOVER_DIR = "/home/jovyan/data/stage/handover_events"
+TRIPS_DIR    = "/home/jovyan/data/stage/trips"
 COORD_CSV    = "/home/jovyan/data/sim/raw/shared_cell_location_lat_lon.csv"
 POLL_SECONDS = 485
 
@@ -166,7 +167,28 @@ except Exception as e:
 # ---------------------------------------------------------------------------
 # Tabs
 # ---------------------------------------------------------------------------
-tab1, tab2 = st.tabs(["Silence Gaps", "Signal Quality"])
+@st.cache_data(show_spinner="Analysing neighbour signal...", ttl=300)
+def query_neighbour_signal(start_date, end_date):
+    con = duckdb.connect()
+    return con.execute(f"""
+        SELECT
+            first_cell                                   AS cell_id,
+            COUNT(*)                                     AS trips,
+            ROUND(AVG(avg_neighbor_rsrp), 1)             AS avg_neighbor_rsrp,
+            ROUND(MIN(min_neighbor_rsrp), 1)             AS worst_neighbor_rsrp,
+            ROUND(AVG(avg_neighbor_rsrq), 1)             AS avg_neighbor_rsrq,
+            COUNT(DISTINCT vehicle_id)                   AS vehicles
+        FROM read_parquet('{TRIPS_DIR}/event_date=*/*.parquet', hive_partitioning=true)
+        WHERE event_date BETWEEN '{start_date}' AND '{end_date}'
+          AND avg_neighbor_rsrp IS NOT NULL
+        GROUP BY first_cell
+        ORDER BY avg_neighbor_rsrp ASC
+        LIMIT 500
+    """).df()
+
+neighbour_df = query_neighbour_signal(start_date, end_date)
+
+tab1, tab2, tab3 = st.tabs(["Silence Gaps", "Signal Quality", "Neighbour Signal"])
 
 # ── Tab 1 ────────────────────────────────────────────────────────────────────
 with tab1:
@@ -330,6 +352,82 @@ with tab2:
                 "avg_rsrp":      "Avg RSRP (dBm)",
                 "min_rsrp":      "Min RSRP (dBm)",
                 "avg_sinr":      "Avg SINR (dB)",
+            }),
+            use_container_width=True,
+            hide_index=True,
+        )
+
+# ── Tab 3: Neighbour Signal ───────────────────────────────────────────────────
+with tab3:
+    st.caption(
+        "Avg RSRP of the strongest neighbour cell, aggregated per trip origin cell. "
+        "Low values indicate weak coverage in the surrounding cell neighbourhood."
+    )
+
+    if neighbour_df.empty:
+        st.warning("No neighbour signal data found for this date range.")
+    else:
+        c1, c2, c3 = st.columns(3)
+        c1.metric("Cells analysed",      f"{len(neighbour_df):,}")
+        c2.metric("Avg neighbour RSRP",  f"{neighbour_df['avg_neighbor_rsrp'].mean():.1f} dBm")
+        c3.metric("Worst neighbour RSRP",f"{neighbour_df['worst_neighbor_rsrp'].min():.1f} dBm")
+
+        st.divider()
+
+        map_rows_n = []
+        for _, row in neighbour_df.iterrows():
+            cid = int(row["cell_id"]) if pd.notna(row["cell_id"]) else None
+            if cid and cid in coord_lookup:
+                lat, lon = coord_lookup[cid]
+                map_rows_n.append({**row.to_dict(), "lat": lat, "lon": lon, "cell_id": cid})
+
+        if map_rows_n:
+            all_lats = [r["lat"] for r in map_rows_n]
+            all_lons = [r["lon"] for r in map_rows_n]
+            centre_n = [sum(all_lats) / len(all_lats), sum(all_lons) / len(all_lons)]
+            mn = folium.Map(location=centre_n, zoom_start=5, tiles="CartoDB positron")
+
+            rsrp_min = min(r["avg_neighbor_rsrp"] for r in map_rows_n)
+            rsrp_max = max(r["avg_neighbor_rsrp"] for r in map_rows_n)
+            rsrp_range = rsrp_max - rsrp_min or 1
+
+            for r in map_rows_n:
+                # Colour: red = worst RSRP, green = best
+                norm = (r["avg_neighbor_rsrp"] - rsrp_min) / rsrp_range
+                red  = int(255 * (1 - norm))
+                green= int(180 * norm)
+                colour = f"#{red:02x}{green:02x}00"
+                folium.CircleMarker(
+                    location=[r["lat"], r["lon"]],
+                    radius=5,
+                    color=colour,
+                    fill=True,
+                    fill_opacity=0.7,
+                    tooltip=(
+                        f'Cell {r["cell_id"]}<br>'
+                        f'Avg neighbour RSRP: {r["avg_neighbor_rsrp"]} dBm<br>'
+                        f'Worst neighbour RSRP: {r["worst_neighbor_rsrp"]} dBm<br>'
+                        f'Avg neighbour RSRQ: {r["avg_neighbor_rsrq"]} dB<br>'
+                        f'Trips: {int(r["trips"]):,} | Vehicles: {int(r["vehicles"]):,}'
+                    ),
+                ).add_to(mn)
+
+            st_folium(mn, width=1200, height=550, returned_objects=[])
+            st.caption("Red = weakest neighbour signal, green = strongest.")
+        else:
+            st.info("No cells could be mapped — coordinate lookup returned no matches.")
+
+        st.divider()
+
+        st.subheader("Weakest neighbour signal cells")
+        st.dataframe(
+            neighbour_df.head(50).rename(columns={
+                "cell_id":             "Cell ID",
+                "trips":               "Trips",
+                "vehicles":            "Vehicles",
+                "avg_neighbor_rsrp":   "Avg neighbour RSRP (dBm)",
+                "worst_neighbor_rsrp": "Worst neighbour RSRP (dBm)",
+                "avg_neighbor_rsrq":   "Avg neighbour RSRQ (dB)",
             }),
             use_container_width=True,
             hide_index=True,

@@ -46,7 +46,9 @@ def query_by_hour(start_date, end_date):
             COUNT(*)                                                      AS trips,
             COUNT(DISTINCT vehicle_id)                                    AS vehicles,
             ROUND(AVG(duration_minutes), 1)                               AS avg_duration_min,
-            ROUND(AVG(n_handovers / NULLIF(duration_minutes, 0) * 60), 2) AS avg_ho_per_hour
+            ROUND(AVG(n_handovers / NULLIF(duration_minutes, 0) * 60), 2) AS avg_ho_per_hour,
+            ROUND(AVG(avg_ping_ms), 1)                                    AS avg_ping_ms,
+            ROUND(AVG(avg_neighbor_rsrp), 2)                              AS avg_neighbor_rsrp
         FROM read_parquet('{TRIPS_DIR}/event_date=*/*.parquet', hive_partitioning=true)
         WHERE event_date BETWEEN '{start_date}' AND '{end_date}'
           AND duration_minutes > 0
@@ -84,7 +86,9 @@ def query_by_month(start_date, end_date):
             ROUND(AVG(duration_minutes), 1)                               AS avg_duration_min,
             ROUND(AVG(n_handovers / NULLIF(duration_minutes, 0) * 60), 2) AS avg_ho_per_hour,
             ROUND(AVG(n_cells), 1)                                        AS avg_cells_per_trip,
-            ROUND(SUM(duration_minutes) / 60, 0)                          AS total_hours
+            ROUND(SUM(duration_minutes) / 60, 0)                          AS total_hours,
+            ROUND(AVG(avg_ping_ms), 1)                                    AS avg_ping_ms,
+            ROUND(AVG(avg_neighbor_rsrp), 2)                              AS avg_neighbor_rsrp
         FROM read_parquet('{TRIPS_DIR}/event_date=*/*.parquet', hive_partitioning=true)
         WHERE event_date BETWEEN '{start_date}' AND '{end_date}'
           AND duration_minutes > 0
@@ -184,6 +188,35 @@ with tab1:
     fig3.update_layout(height=280)
     fig3.update_xaxes(tickvals=list(range(0, 24)))
     st.plotly_chart(fig3, use_container_width=True)
+
+    st.divider()
+    col_kpi1, col_kpi2 = st.columns(2)
+    with col_kpi1:
+        st.subheader("Avg ping latency by hour")
+        fig_ping = px.line(
+            hour_df.dropna(subset=["avg_ping_ms"]),
+            x="hour_of_day", y="avg_ping_ms",
+            labels={"hour_of_day": "Hour (local)", "avg_ping_ms": "Avg ping (ms)"},
+            markers=True,
+            color_discrete_sequence=["#4363d8"],
+        )
+        fig_ping.update_layout(height=280)
+        fig_ping.update_xaxes(tickvals=list(range(0, 24)))
+        st.plotly_chart(fig_ping, use_container_width=True)
+        st.caption("Average of the four ping measurements per event, averaged across all trips starting in that hour.")
+    with col_kpi2:
+        st.subheader("Avg neighbour RSRP by hour")
+        fig_rsrp = px.line(
+            hour_df.dropna(subset=["avg_neighbor_rsrp"]),
+            x="hour_of_day", y="avg_neighbor_rsrp",
+            labels={"hour_of_day": "Hour (local)", "avg_neighbor_rsrp": "Avg neighbour RSRP (dBm)"},
+            markers=True,
+            color_discrete_sequence=["#e6194b"],
+        )
+        fig_rsrp.update_layout(height=280)
+        fig_rsrp.update_xaxes(tickvals=list(range(0, 24)))
+        st.plotly_chart(fig_rsrp, use_container_width=True)
+        st.caption("Average RSRP of the strongest neighbour cell. Lower = weaker surrounding coverage.")
 
 # ── Tab 2: Day of Week ────────────────────────────────────────────────────────
 with tab2:
@@ -301,6 +334,34 @@ with tab3:
         )
 
     st.divider()
+    st.subheader("Client KPI trends over time")
+    col_left3, col_right3 = st.columns(2)
+
+    with col_left3:
+        fig5 = px.line(
+            month_df.dropna(subset=["avg_ping_ms"]),
+            x="month", y="avg_ping_ms",
+            labels={"month": "", "avg_ping_ms": "Avg ping (ms)"},
+            markers=True,
+            color_discrete_sequence=["#4363d8"],
+        )
+        fig5.update_layout(height=300, title="Avg ping latency per month")
+        st.plotly_chart(fig5, use_container_width=True)
+        st.caption("Monthly average of the four ping measurements per event across all trips.")
+
+    with col_right3:
+        fig6 = px.line(
+            month_df.dropna(subset=["avg_neighbor_rsrp"]),
+            x="month", y="avg_neighbor_rsrp",
+            labels={"month": "", "avg_neighbor_rsrp": "Avg neighbour RSRP (dBm)"},
+            markers=True,
+            color_discrete_sequence=["#e6194b"],
+        )
+        fig6.update_layout(height=300, title="Avg neighbour RSRP per month")
+        st.plotly_chart(fig6, use_container_width=True)
+        st.caption("Monthly average RSRP of the strongest neighbour cell. Downward trend = degrading coverage environment.")
+
+    st.divider()
     st.subheader("Monthly summary table")
     st.dataframe(
         month_df.rename(columns={
@@ -311,6 +372,8 @@ with tab3:
             "avg_ho_per_hour":   "Avg HO/drive-hr",
             "avg_cells_per_trip":"Avg cells/trip",
             "total_hours":       "Total drive hours",
+            "avg_ping_ms":       "Avg ping (ms)",
+            "avg_neighbor_rsrp": "Avg nbr RSRP (dBm)",
         }),
         use_container_width=True,
         hide_index=True,
