@@ -74,7 +74,7 @@ SELECT
     c.lon,
     CAST(EXTRACT(hour FROM e.event_ts) AS INTEGER) AS hour_of_day,
     CAST(EXTRACT(dow  FROM e.event_ts) AS INTEGER) AS day_of_week,
-    CAST(EXTRACT(month FROM e.event_ts) AS INTEGER) AS month,
+    -- month omitted: not a model feature, dropping it reduces rows ~12x
     COUNT(*) AS n_events,
     AVG((e.ping1 + e.ping2 + e.ping3 + e.ping4) / 4.0) AS avg_ping_ms
 FROM read_parquet('{HANDOVER_DIR}/event_date=*/*.parquet', hive_partitioning=true) e
@@ -82,12 +82,11 @@ JOIN coords c ON TRY_CAST(e.cell_id AS INTEGER) = c.cell_id
 WHERE e.ping1 IS NOT NULL
 GROUP BY c.cell_id, c.lat, c.lon,
          EXTRACT(hour FROM e.event_ts),
-         EXTRACT(dow  FROM e.event_ts),
-         EXTRACT(month FROM e.event_ts)
-HAVING COUNT(*) >= 3
+         EXTRACT(dow  FROM e.event_ts)
+HAVING COUNT(*) >= 5
 """).df()
 
-log(f"  {len(df):,} active (cell × hour × dow × month) buckets")
+log(f"  {len(df):,} active (cell × hour × dow) buckets")
 log(f"  {df['cell_id'].nunique():,} unique cells")
 
 # ---------------------------------------------------------------------------
@@ -96,11 +95,10 @@ log(f"  {df['cell_id'].nunique():,} unique cells")
 log("Engineering features...")
 df = df.dropna(subset=["avg_ping_ms"])
 
-# Label: above-median latency for the training period → "high latency cell"
-# Guarantees ~50/50 split; P(gap) > 0.5 means "worse than fleet average ping"
-train_mask   = df["month"].between(1, 9)
-median_ping  = float(df.loc[train_mask, "avg_ping_ms"].median())
-log(f"  Fleet median avg_ping_ms (train): {median_ping:.1f} ms")
+# Label: above-median latency → "high latency cell/time"
+# ~50/50 split; P(high latency) > 0.5 = worse than fleet median
+median_ping  = float(df["avg_ping_ms"].median())
+log(f"  Fleet median avg_ping_ms: {median_ping:.1f} ms")
 df["is_gap"] = df["avg_ping_ms"] > median_ping
 df["hour_sin"], df["hour_cos"] = cyclic_encode(df["hour_of_day"], 24)
 df["dow_sin"],  df["dow_cos"]  = cyclic_encode(df["day_of_week"],  7)
@@ -109,12 +107,12 @@ df = df.dropna(subset=FEATURES)
 log(f"  Overall gap rate: {df['is_gap'].mean():.1%}  ({df['is_gap'].sum():,} / {len(df):,} buckets)")
 
 # ---------------------------------------------------------------------------
-# 4. Train / test split (temporal — months 1-9 train, 10-12 test)
+# 4. Train / test split (random 80/20 — no month dimension in data)
 # ---------------------------------------------------------------------------
-train = df[df["month"].between(1, 9)]
-test  = df[df["month"].between(10, 12)]
-X_train = train[FEATURES].values;  y_train = train["is_gap"].values.astype(int)
-X_test  = test[FEATURES].values;   y_test  = test["is_gap"].values.astype(int)
+from sklearn.model_selection import train_test_split
+X = df[FEATURES].values
+y = df["is_gap"].values.astype(int)
+X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
 log(f"  Train: {len(X_train):,}  |  Test: {len(X_test):,}")
 
 # ---------------------------------------------------------------------------
