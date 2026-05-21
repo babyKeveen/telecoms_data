@@ -186,8 +186,8 @@ else:
         t = max(0.0, min(1.0, (p - p_lo) / span))
         return "#%02x%02x00" % (int(220 * t), int(180 * (1 - t)))
 
-    # Plot cells above threshold
-    plot_df = above if len(above) <= 5000 else above.head(5000)
+    # Plot cells above threshold — random sample to preserve colour range
+    plot_df = above if len(above) <= 5000 else above.sample(5000, random_state=42)
     for _, r in plot_df.iterrows():
         col = pgap_colour(float(r["p_gap"]))
         tip = f"Cell {int(r['cell_id'])}<br>P(gap): {r['p_gap']:.1%}"
