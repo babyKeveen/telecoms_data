@@ -151,7 +151,7 @@ st.sidebar.header("Filters")
 state = st.sidebar.selectbox("State", sorted(US_STATES.keys()), index=sorted(US_STATES.keys()).index("Michigan"))
 hour  = st.sidebar.slider("Hour of day", 0, 23, 9, format="%d:00")
 dow   = st.sidebar.selectbox("Day of week", range(7), format_func=lambda d: DOW_LABELS[d], index=1)
-threshold = st.sidebar.slider("Show cells with P(gap) ≥", 0.50, 0.99, 0.70, step=0.01,
+threshold = st.sidebar.slider("Show cells with P(high latency) ≥", 0.10, 0.99, 0.50, step=0.01,
                                format="%.2f")
 
 # Compute
