@@ -131,9 +131,9 @@ def compute_scores(state: str, hour: int, dow: int) -> pd.DataFrame:
 # ---------------------------------------------------------------------------
 st.set_page_config(page_title="Coverage Forecast", layout="wide")
 st.title("📡 Coverage Gap Forecast")
-st.caption("ML-predicted probability that a cell has **worse-than-fleet-average** neighbour RSRP for the selected time. "
-           "P(gap) > 0.5 = worse than average. Red = worst relative performers; green = best. "
-           "Colour scale is data-driven (p10–p90 of current state scores).")
+st.caption("ML-predicted probability that a cell has **above-average ping latency** for the selected time. "
+           "P(high latency) > 0.5 = worse than fleet median. Red = highest latency; green = lowest. "
+           "Colour scale spans p10–p90 of current state scores.")
 
 # Check model is available
 try:

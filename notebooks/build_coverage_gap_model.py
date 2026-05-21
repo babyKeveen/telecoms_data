@@ -76,10 +76,10 @@ SELECT
     CAST(EXTRACT(dow  FROM e.event_ts) AS INTEGER) AS day_of_week,
     CAST(EXTRACT(month FROM e.event_ts) AS INTEGER) AS month,
     COUNT(*) AS n_events,
-    SUM(CASE WHEN e.pci_1_rsrp < {RSRP_THRESHOLD} THEN 1 ELSE 0 END) AS n_gap
+    AVG((e.ping1 + e.ping2 + e.ping3 + e.ping4) / 4.0) AS avg_ping_ms
 FROM read_parquet('{HANDOVER_DIR}/event_date=*/*.parquet', hive_partitioning=true) e
 JOIN coords c ON TRY_CAST(e.cell_id AS INTEGER) = c.cell_id
-WHERE e.pci_1_rsrp IS NOT NULL
+WHERE e.ping1 IS NOT NULL
 GROUP BY c.cell_id, c.lat, c.lon,
          EXTRACT(hour FROM e.event_ts),
          EXTRACT(dow  FROM e.event_ts),
@@ -94,14 +94,14 @@ log(f"  {df['cell_id'].nunique():,} unique cells")
 # 3. Feature engineering — one training row per bucket
 # ---------------------------------------------------------------------------
 log("Engineering features...")
-df["gap_rate"] = df["n_gap"] / df["n_events"].clip(lower=1)
+df = df.dropna(subset=["avg_ping_ms"])
 
-# Use the training-set median as threshold — produces ~50/50 split and
-# means P(gap) > 0.5 = "worse than fleet average coverage"
-train_mask     = df["month"].between(1, 9)
-median_gap     = float(df.loc[train_mask, "gap_rate"].median())
-log(f"  Fleet median gap_rate (train): {median_gap:.3f}")
-df["is_gap"]   = df["gap_rate"] > median_gap
+# Label: above-median latency for the training period → "high latency cell"
+# Guarantees ~50/50 split; P(gap) > 0.5 means "worse than fleet average ping"
+train_mask   = df["month"].between(1, 9)
+median_ping  = float(df.loc[train_mask, "avg_ping_ms"].median())
+log(f"  Fleet median avg_ping_ms (train): {median_ping:.1f} ms")
+df["is_gap"] = df["avg_ping_ms"] > median_ping
 df["hour_sin"], df["hour_cos"] = cyclic_encode(df["hour_of_day"], 24)
 df["dow_sin"],  df["dow_cos"]  = cyclic_encode(df["day_of_week"],  7)
 df = df.dropna(subset=FEATURES)
