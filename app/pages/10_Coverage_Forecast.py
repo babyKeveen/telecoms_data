@@ -176,8 +176,10 @@ else:
     centre = [(lat_min + lat_max) / 2, (lon_min + lon_max) / 2]
     m = folium.Map(location=centre, zoom_start=7, tiles="CartoDB positron")
 
-    p_lo = float(scores["p_gap"].quantile(0.10))
-    p_hi = float(scores["p_gap"].quantile(0.90))
+    # Scale colours across the visible cells only (above threshold)
+    plot_pool = above if not above.empty else scores
+    p_lo = float(plot_pool["p_gap"].quantile(0.10))
+    p_hi = float(plot_pool["p_gap"].quantile(0.90))
     span = max(p_hi - p_lo, 1e-6)
 
     def pgap_colour(p):
@@ -199,7 +201,7 @@ else:
     folium.LayerControl(collapsed=False).add_to(m)
     st_folium(m, width=1200, height=560, returned_objects=[])
 
-    note = f"Colour scale: green = P(gap) ≤ {p_lo:.2f} (p10), red = P(gap) ≥ {p_hi:.2f} (p90) for this state/time."
+    note = f"Colour scale spans visible cells: green = P ≤ {p_lo:.2f} (p10), red = P ≥ {p_hi:.2f} (p90)."
     if len(above) > 5000:
         note += f" Showing top 5,000 of {len(above):,} cells above threshold."
     st.caption(note)
