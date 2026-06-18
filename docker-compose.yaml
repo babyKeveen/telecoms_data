@@ -2,6 +2,7 @@ services:
   ml-notebook:
     build: .
     container_name: telco-ml-lab
+    restart: unless-stopped
     ports:
       - "8888:8888"
       - "8501:8501"
@@ -13,5 +14,15 @@ services:
     volumes:
       - .:/home/jovyan/telco-poc
       - ${DATA_PATH}:/home/jovyan/data
+    command:
+      - bash
+      - -c
+      - |
+        pip install -q -e /home/jovyan/telco-poc
+        streamlit run /home/jovyan/telco-poc/app/Home.py \
+          --server.port 8501 \
+          --server.address 0.0.0.0 \
+          --server.headless true &
+        exec start-notebook.sh
 
 volumes: {}
